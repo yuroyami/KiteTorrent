@@ -1,0 +1,83 @@
+name: Docs
+
+# Builds the MkDocs Material site + the Dokka API reference and deploys both to
+# GitHub Pages (https://yuroyami.github.io/KiteTorrent/). The API reference lands
+# at /api/ to match the "API reference ▸" link in mkdocs.yml.
+#
+# KiteTorrent is pure Kotlin with no native toolchain, so the standard JDK 21 +
+# Gradle setup is enough; no extra system libraries are required.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '**/*.kt'
+      - '**/build.gradle.kts'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; don't cancel an in-progress run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs Material
+        run: pip install -r docs/requirements.txt
+
+      - name: Build the docs site
+        run: mkdocs build --strict --site-dir site
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Don't fail the whole deploy if Dokka can't build: the MkDocs site still
+      # ships, just without the /api/ reference.
+      - name: Generate and merge the Dokka API reference
+        continue-on-error: true
+        run: |
+          ./gradlew dokkaGenerate --no-configuration-cache
+          mkdir -p site/api
+          cp -r build/dokka/html/. site/api/
+
+      - name: Disable Jekyll processing
+        run: touch site/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

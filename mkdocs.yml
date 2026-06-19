@@ -1,0 +1,98 @@
+site_name: KiteTorrent
+site_url: https://yuroyami.github.io/KiteTorrent/
+site_description: >-
+  A pure-Kotlin BitTorrent engine: a from-scratch Kotlin Multiplatform port of
+  libtorrent (Rasterbar). No JNI, no cinterop. Download, seed and start from
+  magnets on Android, iOS, JVM and the browser.
+site_author: yuroyami
+copyright: Copyright &copy; 2026 yuroyami, BSD-3-Clause
+
+repo_name: yuroyami/KiteTorrent
+repo_url: https://github.com/yuroyami/KiteTorrent
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  language: en
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/download-network
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.highlight:
+      anchor_linenums: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/yuroyami/KiteTorrent
+    - icon: material/package-variant-closed
+      link: https://central.sonatype.com/namespace/io.github.yuroyami
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Guides:
+      - Downloading: downloading.md
+      - Magnet links: magnets.md
+      - Creating and seeding: seeding.md
+      - Recipes: recipes.md
+  - Reference:
+      - The pure core toolkit: core-toolkit.md
+      - Engine and settings: engine-settings.md
+      - Platform support: platforms.md
+      - About and status: about.md
+      - API reference ▸: https://yuroyami.github.io/KiteTorrent/api/
