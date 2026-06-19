@@ -20,7 +20,9 @@ import io.github.yuroyami.kitetorrent.Digest32
  * reserved blocks. libtorrent sets, in `write_handshake()`:
  *  - `reserved[7] |= 0x01` — DHT support (BEP-5),
  *  - `reserved[7] |= 0x04` — Fast extension (BEP-6),
- *  - `reserved[5] |= 0x10` — Extension protocol (BEP-10).
+ *  - `reserved[5] |= 0x10` — Extension protocol (BEP-10),
+ *  - `reserved[7] |= 0x10` — v2 upgrade (BEP-52), set only for a v1 peer in a hybrid
+ *    torrent to advertise willingness to upgrade to the v2 protocol.
  *
  * (`reserved[7]` is the last byte; `reserved[5]` is the 6th byte / index 5.)
  */
@@ -40,6 +42,13 @@ class Handshake(
 
     /** True if the peer set the extension-protocol bit (`reserved[5] & 0x10`, BEP-10). */
     val supportsExtended: Boolean get() = (reserved[5].toInt() and EXTENSION_FLAG) != 0
+
+    /**
+     * True if the peer set the v2-upgrade bit (`reserved[7] & 0x10`, BEP-52). For a
+     * v1 connection this signals the peer is willing to upgrade to the BitTorrent v2
+     * protocol on a hybrid torrent.
+     */
+    val supportsV2: Boolean get() = (reserved[7].toInt() and V2_FLAG) != 0
 
     /** Re-encode this handshake to its canonical 68-byte form. */
     fun encode(): ByteArray = encode(infoHash, peerId, reserved)
@@ -61,7 +70,7 @@ class Handshake(
 
     override fun toString(): String =
         "Handshake(infoHash=${infoHash.toHex()}, peerId=${peerId.toHex()}, " +
-            "dht=$supportsDht, fast=$supportsFast, ext=$supportsExtended)"
+            "dht=$supportsDht, fast=$supportsFast, ext=$supportsExtended, v2=$supportsV2)"
 
     companion object {
         /** The single length-prefix byte: the length of [PROTOCOL_STRING]. */
@@ -82,6 +91,9 @@ class Handshake(
         /** Extension-protocol flag, OR'd into reserved byte 5 (BEP-10). */
         const val EXTENSION_FLAG: Int = 0x10
 
+        /** v2-upgrade flag, OR'd into reserved byte 7 (BEP-52). */
+        const val V2_FLAG: Int = 0x10
+
         /** The protocol string as raw ASCII bytes, computed once. */
         private val PROTOCOL_BYTES: ByteArray = PROTOCOL_STRING.encodeToByteArray()
 
@@ -89,11 +101,35 @@ class Handshake(
          * Build the 8-byte reserved block libtorrent emits by default: DHT + Fast +
          * Extension-protocol bits set (matching `write_handshake()` with all features
          * compiled in, minus the v2-upgrade bit which depends on torrent state).
+         *
+         * [v2] adds the BEP-52 v2-upgrade bit (`reserved[7] |= 0x10`). libtorrent only
+         * sets it for a v1 peer in a hybrid torrent (`!protocol_v2 && info_hash.has_v2()`),
+         * so it defaults to `false` to preserve the prior wire output.
          */
-        fun defaultReserved(): ByteArray {
+        fun defaultReserved(v2: Boolean = false): ByteArray =
+            buildReserved(dht = true, fast = true, extended = true, v2 = v2)
+
+        /**
+         * Build an 8-byte reserved block advertising exactly the chosen capabilities.
+         * Mirrors the OR-into-reserved logic of `write_handshake()`:
+         *  - [dht] → `reserved[7] |= 0x01` (BEP-5),
+         *  - [fast] → `reserved[7] |= 0x04` (BEP-6),
+         *  - [extended] → `reserved[5] |= 0x10` (BEP-10),
+         *  - [v2] → `reserved[7] |= 0x10` (BEP-52).
+         */
+        fun buildReserved(
+            dht: Boolean = true,
+            fast: Boolean = true,
+            extended: Boolean = true,
+            v2: Boolean = false,
+        ): ByteArray {
             val r = ByteArray(8)
-            r[5] = (r[5].toInt() or EXTENSION_FLAG).toByte() // extension protocol (BEP-10)
-            r[7] = (r[7].toInt() or DHT_FLAG or FAST_FLAG).toByte() // DHT (BEP-5) + Fast (BEP-6)
+            if (extended) r[5] = (r[5].toInt() or EXTENSION_FLAG).toByte()
+            var b7 = 0
+            if (dht) b7 = b7 or DHT_FLAG
+            if (fast) b7 = b7 or FAST_FLAG
+            if (v2) b7 = b7 or V2_FLAG
+            r[7] = (r[7].toInt() or b7).toByte()
             return r
         }
 

@@ -45,6 +45,9 @@ class UtpSocketManager(
     private val keys = HashMap<UtpStream, String>()
     private var nextConnectionId = 0x4000 // arbitrary start; wraps within 16 bits
 
+    /** One real monotonic clock shared by every stream — drives RTT + the RTO timer. */
+    private val clock = MonotonicMicros()
+
     /** Datagrams that are not uTP (the DHT's bencoded packets), behind [dhtTransport]. */
     private val otherInbox = Channel<UdpPacket>(Channel.UNLIMITED)
 
@@ -80,7 +83,7 @@ class UtpSocketManager(
         lock.withLock {
             val id = nextConnectionId
             nextConnectionId = (nextConnectionId + 2) and 0xFFFF
-            stream = UtpStream(socket, host, port, scope, connectionId = id)
+            stream = UtpStream(socket, host, port, scope, nowMicros = clock, connectionId = id)
             val key = key(port, (id - 1) and 0xFFFF) // we receive on id-1
             streams[key] = stream
             keys[stream] = key
@@ -128,7 +131,7 @@ class UtpSocketManager(
         if (header.type != UtpType.ST_SYN) return // not ours and not an open — drop
 
         // passive open: the acceptor receives on (SYN id + 1)
-        val stream = UtpStream(socket, pkt.host, pkt.port, scope)
+        val stream = UtpStream(socket, pkt.host, pkt.port, scope, nowMicros = clock)
         val key = key(pkt.port, (header.connectionId + 1) and 0xFFFF)
         val fresh = lock.withLock {
             if (streams.containsKey(key)) {

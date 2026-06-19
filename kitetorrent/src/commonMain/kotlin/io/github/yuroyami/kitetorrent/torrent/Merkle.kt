@@ -248,4 +248,112 @@ object Merkle {
 
         return level[0]
     }
+
+    /**
+     * Builds a file's BitTorrent v2 merkle **root** from its 16 KiB-block SHA-256
+     * leaf hashes. This is the clear top-level entry point a v2 download / torrent
+     * creator uses: pass the file's block hashes in order and get the `pieces root`
+     * that ends up in the `.torrent`.
+     *
+     * The leaf count is padded up to the next power of two with zero-hashes
+     * (`SHA-256(0)` at the block layer, folded up the implied padding). This is
+     * exactly [merkleRoot] with the block-layer pad — provided under an explicit
+     * name so call sites read clearly. Mirrors `merkle_root(leaves)`.
+     *
+     * @param blockLeaves the file's per-16-KiB-block SHA-256 hashes, in order.
+     *   Must be non-empty.
+     */
+    fun fileRoot(blockLeaves: List<Sha256Hash>): Sha256Hash =
+        merkleRoot(blockLeaves, Digest32.zeros(HASH_SIZE))
+
+    /**
+     * Result of [computeProofRoot]: the [root] the supplied base hashes and
+     * `proofLayers` uncle hashes fold up to, plus the [subtreeRoot] (the root of
+     * just the base-hash subtree, i.e. the node the uncle hashes prove).
+     */
+    data class ProofRoot(val subtreeRoot: Sha256Hash, val root: Sha256Hash)
+
+    /**
+     * Folds a run of base-layer hashes into their subtree root, then walks the
+     * `proofLayers` (uncle / sibling) hashes upward, computing the implied tree
+     * root. Pure function: it does not consult or mutate any existing tree, it
+     * just computes what root these hashes *claim*. Compare the returned [root]
+     * against the known file root to accept or reject the proof.
+     *
+     * This is the computation behind libtorrent's `merkle_validate_and_insert_proofs`
+     * (here separated from the tree-insertion side effects so it can be reused by
+     * both stateless [verifyProof] and the in-tree path in [MerkleTree]).
+     *
+     * The subtree of `baseHashes` is padded up to a power of two with `padHash`
+     * (default the all-zero block pad). The first base hash sits at flat index
+     * `startIndex` within the *base layer*; only its low bit matters at each step
+     * to know whether the uncle hash is the left or right sibling.
+     *
+     * @param baseHashes the contiguous run of known hashes at the base layer
+     *   (block or piece layer). Must be non-empty.
+     * @param startIndex offset of the first base hash within its layer (>= 0).
+     *   Used to determine left/right sibling parity as we climb.
+     * @param proofLayers the uncle (sibling) hashes, bottom-up, one per level from
+     *   the subtree root toward the file root. May be empty when the base subtree
+     *   *is* the whole tree.
+     * @param padHash the pad hash for the base layer (default `SHA-256(0)`).
+     */
+    fun computeProofRoot(
+        baseHashes: List<Sha256Hash>,
+        startIndex: Int,
+        proofLayers: List<Sha256Hash>,
+        padHash: Sha256Hash = Digest32.zeros(HASH_SIZE),
+    ): ProofRoot {
+        require(baseHashes.isNotEmpty()) { "need at least one base hash" }
+        require(startIndex >= 0) { "startIndex must be >= 0, was $startIndex" }
+
+        // 1. fold the run of base hashes into a single subtree root.
+        val leafCount = numLeafs(baseHashes.size)
+        val subtreeRoot = rootScratch(baseHashes, leafCount, padHash)
+
+        // 2. the subtree root sits at this offset within the layer that is
+        //    numLayers(leafCount) levels above the base layer.
+        var cursorOffset = startIndex shr numLayers(leafCount)
+        var current = subtreeRoot
+
+        // 3. climb: each proof hash is the sibling at the current level.
+        for (proof in proofLayers) {
+            current = if (cursorOffset and 1 == 0) {
+                // current node is the left child; uncle is to the right.
+                hashPair(current, proof)
+            } else {
+                // current node is the right child; uncle is to the left.
+                hashPair(proof, current)
+            }
+            cursorOffset = cursorOffset shr 1
+        }
+        return ProofRoot(subtreeRoot, current)
+    }
+
+    /**
+     * Verifies a BitTorrent v2 *hashes proof* (BEP 52 / `hash_request`): given the
+     * file's known `piecesRoot`, a contiguous run of `baseHashes` starting at
+     * `startIndex` in the base layer, and the `proofLayers` uncle hashes, returns
+     * true iff they hash all the way up to `piecesRoot`.
+     *
+     * This is the headline check the wire-protocol HashPicker uses to accept hashes
+     * received from a peer before inserting them into a [MerkleTree]. Mirrors the
+     * accept/reject decision of `merkle_validate_and_insert_proofs` (without the
+     * insertion side effect).
+     *
+     * @param piecesRoot the file's known apex root to validate against.
+     * @param baseHashes the run of received leaf/base hashes, in order (non-empty).
+     * @param startIndex offset of the first base hash within the base layer.
+     * @param proofLayers the uncle hashes, bottom-up; empty when the base subtree
+     *   spans the whole tree.
+     * @param padHash pad hash for the base layer (default the all-zero block pad).
+     */
+    fun verifyProof(
+        piecesRoot: Sha256Hash,
+        baseHashes: List<Sha256Hash>,
+        startIndex: Int,
+        proofLayers: List<Sha256Hash>,
+        padHash: Sha256Hash = Digest32.zeros(HASH_SIZE),
+    ): Boolean =
+        computeProofRoot(baseHashes, startIndex, proofLayers, padHash).root == piecesRoot
 }

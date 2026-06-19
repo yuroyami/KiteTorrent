@@ -13,6 +13,9 @@ import io.github.yuroyami.kitetorrent.session.net.bindTcp
 import io.github.yuroyami.kitetorrent.session.peer.PeerConnection
 import io.github.yuroyami.kitetorrent.session.peer.asByteStream
 import io.github.yuroyami.kitetorrent.session.tracker.PeerEndpoint
+import io.github.yuroyami.kitetorrent.settings.EncPolicy
+import io.github.yuroyami.kitetorrent.settings.IntSetting
+import io.github.yuroyami.kitetorrent.settings.SettingsPack
 import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -97,6 +100,8 @@ class LoopbackDownloadTest {
             scope = workers,
             peerId = peerIdBytes("KT-leecher"),
             listenPort = port,
+            // this fake seeder speaks plaintext only — exercise the plaintext dial path
+            settings = SettingsPack().apply { setInt(IntSetting.OUT_ENC_POLICY, EncPolicy.PE_DISABLED) },
         )
         session.connect(listOf(PeerEndpoint("127.0.0.1", port)))
 

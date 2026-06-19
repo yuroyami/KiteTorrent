@@ -1,6 +1,7 @@
 package io.github.yuroyami.kitetorrent.torrent.resume
 
 import io.github.yuroyami.kitetorrent.Bitfield
+import io.github.yuroyami.kitetorrent.Digest32
 import io.github.yuroyami.kitetorrent.Sha1Hash
 import io.github.yuroyami.kitetorrent.Sha256Hash
 import io.github.yuroyami.kitetorrent.peer.PeerAddress
@@ -42,10 +43,11 @@ data class Endpoint(val address: PeerAddress, val port: Int) {
  *    serialisation boundary, while [ti] is the convenient decoded view.
  *  - Session-runtime-only and extension fields from the C++ struct
  *    (`userdata`, `extensions`, the deprecated `url`/`resume_data`) are not modelled.
- *  - The v2 merkle-tree fields (`merkle_trees`, `merkle_tree_mask`,
- *    `verified_leaf_hashes`) are out of scope for this resume port; the `MerkleTree`
- *    machinery owns that reconstruction. The `trees` resume key is therefore not
- *    emitted or parsed here.
+ *  - The v2 merkle-tree fields ([merkleTrees], [merkleTreeMask], [verifiedLeafHashes])
+ *    are carried verbatim and round-trip through the `trees` resume key (each entry a
+ *    `{ "hashes", "verified", "mask" }` dict, as in `write_resume_data`/`read_resume_data`).
+ *    The `MerkleTree` machinery still owns the actual hash reconstruction; this struct
+ *    only preserves the bytes losslessly across a save/load cycle.
  *
  * Every list/map defaults to empty and every scalar to libtorrent's documented
  * default (e.g. the rate/connection limits to `-1` = unlimited, the scrape counts to
@@ -105,6 +107,29 @@ data class AddTorrentParams(
     /** File index → new filename to apply before adding (renamed/relocated files). */
     val renamedFiles: Map<Int, String> = emptyMap(),
 
+    // --- v2 merkle trees (BitTorrent v2 fast-resume) ---------------------------
+    /**
+     * Per-file merkle-tree node hashes (SHA-256), the port of
+     * `add_torrent_params::merkle_trees` (`aux::vector<std::vector<sha256_hash>>`).
+     * Outer index = file index; inner list = the (sparse or full) tree nodes for that
+     * file. Empty for v1-only torrents. Round-trips through the `trees`/`hashes` key.
+     */
+    val merkleTrees: List<List<Digest32>> = emptyList(),
+    /**
+     * Per-file bitmask marking which positions in the full merkle tree the
+     * corresponding entry of [merkleTrees] actually fills, the port of
+     * `merkle_tree_mask`. An empty inner list (for a present [merkleTrees] entry) means
+     * the tree is dense (all nodes present). Round-trips through the `trees`/`mask` key.
+     */
+    val merkleTreeMask: List<List<Boolean>> = emptyList(),
+    /**
+     * Per-file bitmask of which leaf hashes have been verified against the root, the
+     * port of `verified_leaf_hashes`. Empty inner list with a non-empty [merkleTrees]
+     * entry implies all hashes are verified. Round-trips through the `trees`/`verified`
+     * key.
+     */
+    val verifiedLeafHashes: List<List<Boolean>> = emptyList(),
+
     // --- flags & storage -------------------------------------------------------
     /** `torrent_flags_t` mask; see [TorrentFlags]. Defaults to [TorrentFlags.DEFAULT_FLAGS]. */
     val flags: Long = TorrentFlags.DEFAULT_FLAGS,
@@ -152,6 +177,15 @@ data class AddTorrentParams(
     val numIncomplete: Int = -1,
     /** Number of completed downloads reported; -1 ⇒ unknown. */
     val numDownloaded: Int = -1,
+
+    // --- tracker announce state ------------------------------------------------
+    /**
+     * Whether a `completed` tracker announce has already been sent for this torrent
+     * (libtorrent's per-endpoint `complete_sent` / `torrent::m_complete_sent`). Persisted
+     * so a re-added finished torrent does not re-announce `event=completed`. Stored under
+     * the `complete_sent` resume key (an additive key libtorrent ignores when absent).
+     */
+    val completeSent: Boolean = false,
 ) {
     /** True if this flag (a single-bit mask from [TorrentFlags]) is set. */
     fun hasFlag(flag: Long): Boolean = (flags and flag) != 0L
@@ -174,6 +208,8 @@ data class AddTorrentParams(
             filePriorities == o.filePriorities && piecePriorities == o.piecePriorities &&
             havePieces == o.havePieces && verifiedPieces == o.verifiedPieces &&
             unfinishedPieces == o.unfinishedPieces && renamedFiles == o.renamedFiles &&
+            merkleTrees == o.merkleTrees && merkleTreeMask == o.merkleTreeMask &&
+            verifiedLeafHashes == o.verifiedLeafHashes && completeSent == o.completeSent &&
             flags == o.flags && storageModeAllocate == o.storageModeAllocate &&
             maxUploads == o.maxUploads && maxConnections == o.maxConnections &&
             uploadLimit == o.uploadLimit && downloadLimit == o.downloadLimit &&

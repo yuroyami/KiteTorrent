@@ -165,6 +165,33 @@ data class PeerSnubbedAlert(
 }
 
 /**
+ * Generated when a block request receives a response (the block finished
+ * downloading from this peer). Ported from `libtorrent::block_finished_alert`
+ * (alert_type 30). Extends [PeerAlert].
+ *
+ * libtorrent renders `<peer-prefix> block finished downloading (piece: <piece> block: <block>)`.
+ *
+ * @property pieceIndex the index of the piece the block belongs to.
+ * @property blockIndex the index of the block within the piece.
+ */
+data class BlockFinishedAlert(
+    override val torrentName: String?,
+    override val endpoint: String,
+    override val client: String = "Unknown",
+    val pieceIndex: Int,
+    val blockIndex: Int,
+) : PeerAlert() {
+    override val type: Int get() = ALERT_TYPE
+    override val what: String get() = "block_finished"
+    override val category: Int get() = AlertCategory.blockProgress
+
+    override fun message(): String =
+        peerPrefix() + " block finished downloading (piece: " + pieceIndex + " block: " + blockIndex + ")"
+
+    companion object { const val ALERT_TYPE: Int = 30 }
+}
+
+/**
  * Generated when a snubbed peer starts sending data again. Ported from
  * `libtorrent::peer_unsnubbed_alert` (alert_type 20).
  */

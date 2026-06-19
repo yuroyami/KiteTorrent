@@ -82,6 +82,7 @@ class Wave6RobustnessTest {
         private val torrent: TorrentInfo,
         private val data: ByteArray,
         private val withhold: Set<Pair<Int, Int>> = emptySet(),
+        private val peerName: String = "scripted",
     ) {
         val cancels = CopyOnWriteArrayList<Pair<Int, Int>>() // (piece, begin)
         var port: Int = 0
@@ -105,7 +106,7 @@ class Wave6RobustnessTest {
         private suspend fun serve(conn: TcpConnection) {
             try {
                 val hs = Handshake.decode(conn.readExactly(Handshake.LENGTH)) ?: return
-                val pc = PeerConnection(conn.asByteStream(), torrent.infoHashV1!!, peerId("scripted"), torrent.numPieces)
+                val pc = PeerConnection(conn.asByteStream(), torrent.infoHashV1!!, peerId(peerName), torrent.numPieces)
                 pc.completeInboundHandshake(hs)
                 val all = Bitfield(torrent.numPieces).apply { for (i in 0 until torrent.numPieces) setBit(i) }
                 pc.sendBitfield(all)
@@ -143,7 +144,7 @@ class Wave6RobustnessTest {
         try {
 
             val staller = ScriptedSeeder(runtime, torrent, data, withhold = setOf(0 to 16_384))
-            val good = ScriptedSeeder(runtime, torrent, data)
+            val good = ScriptedSeeder(runtime, torrent, data, peerName = "good-seed")
             staller.start(workers)
             good.start(workers)
 

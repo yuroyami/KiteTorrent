@@ -9,6 +9,9 @@ import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
 import io.github.yuroyami.kitetorrent.session.disk.InMemoryDiskIo
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
 import io.github.yuroyami.kitetorrent.session.tracker.PeerEndpoint
+import io.github.yuroyami.kitetorrent.settings.EncPolicy
+import io.github.yuroyami.kitetorrent.settings.IntSetting
+import io.github.yuroyami.kitetorrent.settings.SettingsPack
 import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +93,50 @@ class TwoEngineExchangeTest {
         assertTrue(
             leecherDisk.snapshot().copyOf(data.size).contentEquals(data),
             "leecher's downloaded bytes must match the seeder's",
+        )
+    }
+
+    @Test
+    fun twoEnginesExchangeWithEncryptionForced() = runBlocking {
+        val data = ByteArray(120_000) { ((it * 73 + 11) and 0xff).toByte() }
+        val torrent = buildTorrent("payload.bin", data)
+        val workers = CoroutineScope(coroutineContext + SupervisorJob())
+
+        // both peers REQUIRE MSE/PE — no plaintext fallback can mask a broken handshake
+        fun forced() = SettingsPack().apply {
+            setInt(IntSetting.OUT_ENC_POLICY, EncPolicy.PE_FORCED)
+            setInt(IntSetting.IN_ENC_POLICY, EncPolicy.PE_FORCED)
+        }
+
+        val seederDisk = InMemoryDiskIo(torrent.storage)
+        var off = 0
+        for (p in 0 until torrent.numPieces) {
+            val len = torrent.storage.pieceSize(p)
+            seederDisk.write(p, 0, data.copyOfRange(off, off + len))
+            off += len
+        }
+        val seeder = KiteTorrentEngine(workers, peerId = peerId("KT-seeder"), listenPort = 0, settings = forced())
+        seeder.start()
+        val seederSession = seeder.addTorrent(torrent, seederDisk)
+        assertTrue(seederSession.isSeeding())
+
+        val leecherDisk = InMemoryDiskIo(torrent.storage)
+        val leecher = KiteTorrentEngine(workers, peerId = peerId("KT-leecher"), listenPort = 0, settings = forced())
+        leecher.start()
+        val leecherSession = leecher.addTorrent(torrent, leecherDisk)
+        leecherSession.connect(listOf(PeerEndpoint("127.0.0.1", seeder.boundListenPort)))
+
+        withTimeout(25_000) {
+            while (!leecherSession.isSeeding()) delay(25)
+        }
+
+        workers.cancel()
+        seeder.shutdown()
+        leecher.shutdown()
+
+        assertTrue(
+            leecherDisk.snapshot().copyOf(data.size).contentEquals(data),
+            "leecher must download the whole torrent over a forced-encryption (MSE/PE) connection",
         )
     }
 }

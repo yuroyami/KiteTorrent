@@ -1,5 +1,6 @@
 package io.github.yuroyami.kitetorrent.session.peer
 
+import io.github.yuroyami.kitetorrent.Digest32
 import io.github.yuroyami.kitetorrent.Sha1Hash
 import io.github.yuroyami.kitetorrent.extensions.ExtensionHandshake
 import io.github.yuroyami.kitetorrent.extensions.MetadataTransfer
@@ -23,11 +24,18 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class MetadataExchange(
     private val pc: PeerConnection,
-    private val infoHash: Sha1Hash,
+    /**
+     * The info-hash the received metadata must verify against. A 20-byte digest is treated as a
+     * BEP-3 v1 (SHA-1) hash; a 32-byte digest as a BEP-52 v2 (SHA-256) hash. For a hybrid magnet
+     * pass whichever hash the magnet carried — verification dispatches by width
+     * ([MetadataTransfer.verify]), so a v2-only (btmh) magnet verifies via SHA-256.
+     */
+    private val infoHash: Digest32,
 ) {
     /**
-     * Run the exchange and return the raw, verified `info`-dict bytes (whose SHA-1 equals
-     * [infoHash]), or null if the peer can't/won't provide them within [timeoutMillis].
+     * Run the exchange and return the raw, verified `info`-dict bytes (whose SHA-1 — or SHA-256
+     * for a v2 hash — equals [infoHash]), or null if the peer can't/won't provide them within
+     * [timeoutMillis].
      */
     suspend fun fetch(timeoutMillis: Long = 30_000): ByteArray? = coroutineScope {
         val result = CompletableDeferred<ByteArray?>()
@@ -46,7 +54,13 @@ class MetadataExchange(
                         ExtensionHandshake.HANDSHAKE_ID -> {
                             val hs = ExtensionHandshake.parse(msg.payload)
                             val size = hs?.metadataSize
-                            if (hs?.supportsMetadata == true && size != null && size in 1..MAX_METADATA_SIZE) {
+                            // CAP the advertised metadata size BEFORE allocating any buffer: reject a
+                            // missing/zero/too-large size (libtorrent's `m_metadata_size` sanity gate),
+                            // and validate the implied piece count is sane too.
+                            if (hs?.supportsMetadata == true && size != null &&
+                                size in 1..MAX_METADATA_SIZE &&
+                                UtMetadata.pieceCount(size.toInt()) in 1..MAX_METADATA_PIECES
+                            ) {
                                 theirMetadataId = hs.utMetadataId!!
                                 val t = MetadataTransfer(size.toInt())
                                 transfer = t
@@ -54,7 +68,7 @@ class MetadataExchange(
                                     pc.sendExtended(theirMetadataId, UtMetadata.encodeRequest(piece))
                                 }
                             } else {
-                                result.complete(null) // peer has no metadata to give
+                                result.complete(null) // peer has no metadata to give (or an absurd size)
                             }
                         }
                         ExtensionHandshake.UT_METADATA_ID -> {
@@ -82,5 +96,12 @@ class MetadataExchange(
     companion object {
         /** Sanity cap on advertised metadata size (libtorrent's default is similar). */
         const val MAX_METADATA_SIZE: Long = 8L * 1024 * 1024
+
+        /**
+         * Sanity cap on the number of 16 KiB metadata pieces implied by the advertised size
+         * (the `MAX_METADATA_SIZE` / 16 KiB ceiling). Guards the request fan-out before we
+         * allocate the assembly buffer.
+         */
+        const val MAX_METADATA_PIECES: Int = (MAX_METADATA_SIZE / (16L * 1024)).toInt()
     }
 }

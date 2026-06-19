@@ -79,7 +79,56 @@ object UtPex {
          * `flags &= ~pex_lt_v2` in `on_extended`.
          */
         const val RECEIVE_MASK: Int = 0xFF and LT_V2.inv()
+
+        /**
+         * Assemble the per-peer flags byte the way `ut_pex_plugin::tick` does:
+         *
+         * ```cpp
+         * pex_flags_t flags = p->is_seed() ? pex_seed : pex_flags_t{};
+         * flags |= p->supports_encryption() ? pex_encryption : pex_flags_t{};
+         * flags |= is_utp(p->get_socket()) ? pex_utp : pex_flags_t{};
+         * flags |= p->supports_holepunch() ? pex_holepunch : pex_flags_t{};
+         * ```
+         *
+         * uTP and hole-punch are positive-only signals — clearing them means
+         * "unknown", not "unsupported". The result is `0..0x0F`; the internal
+         * [LT_V2] bit is never set by this builder (it is local-only state).
+         */
+        fun build(
+            encryption: Boolean = false,
+            seed: Boolean = false,
+            utp: Boolean = false,
+            holepunch: Boolean = false,
+        ): Int {
+            var f = 0
+            if (encryption) f = f or ENCRYPTION
+            if (seed) f = f or SEED
+            if (utp) f = f or UTP
+            if (holepunch) f = f or HOLEPUNCH
+            return f
+        }
+
+        /** True if [flags] has the [ENCRYPTION] bit. */
+        fun isEncrypted(flags: Int): Boolean = (flags and ENCRYPTION) != 0
+
+        /** True if [flags] has the [SEED] bit. */
+        fun isSeed(flags: Int): Boolean = (flags and SEED) != 0
+
+        /** True if [flags] has the [UTP] bit (positive-only: false means unknown). */
+        fun isUtp(flags: Int): Boolean = (flags and UTP) != 0
+
+        /** True if [flags] has the [HOLEPUNCH] bit (positive-only: false means unknown). */
+        fun supportsHolepunch(flags: Int): Boolean = (flags and HOLEPUNCH) != 0
     }
+
+    /**
+     * The default cap on how many `added` peers a single PEX message carries, so a
+     * packet stays small. libtorrent uses `max_peer_entries = 100`
+     * (`ut_pex.cpp:61`); this port caps at 50 per the session policy. `dropped`
+     * peers are *not* counted against this limit — only newly-added ones, matching
+     * `if (num_added >= max_peer_entries) break;` in `ut_pex_plugin::tick`.
+     */
+    const val MAX_ADDED_ENTRIES: Int = 50
 
     /**
      * One peer advertised in (or dropped from) a PEX message.
@@ -127,6 +176,18 @@ object UtPex {
 
         /** "host:port" with the [host] literal — convenience for logging and tests. */
         val hostPort: String get() = "$host:$port"
+
+        /** True if this peer's [flags] advertise BitTorrent encryption ([PexFlags.ENCRYPTION]). */
+        val supportsEncryption: Boolean get() = PexFlags.isEncrypted(flags)
+
+        /** True if this peer's [flags] mark it a seed ([PexFlags.SEED]). */
+        val isSeed: Boolean get() = PexFlags.isSeed(flags)
+
+        /** True if this peer's [flags] advertise uTP support ([PexFlags.UTP]); positive-only. */
+        val supportsUtp: Boolean get() = PexFlags.isUtp(flags)
+
+        /** True if this peer's [flags] advertise hole-punch support ([PexFlags.HOLEPUNCH]); positive-only. */
+        val supportsHolepunch: Boolean get() = PexFlags.supportsHolepunch(flags)
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -187,23 +248,33 @@ object UtPex {
      * Empty lists are still emitted as empty strings, the way libtorrent always
      * materializes `added`/`dropped`/`added.f` (and the v6 variants) even when no
      * peers fall into a bucket. Pass [includeEmpty] = false to omit empty keys.
+     *
+     * At most [maxAdded] peers from [added] are written (across both families,
+     * combined), reproducing the `num_added >= max_peer_entries` break in
+     * `ut_pex_plugin::tick`. [dropped] is never truncated. The default cap is
+     * [MAX_ADDED_ENTRIES]; pass a larger value to lift it.
      */
     fun encode(
         added: List<PexPeer>,
         dropped: List<PexPeer> = emptyList(),
         includeEmpty: Boolean = true,
+        maxAdded: Int = MAX_ADDED_ENTRIES,
     ): ByteArray {
         val added4 = ByteArrayBuilder(64)
         val flags4 = ByteArrayBuilder(16)
         val added6 = ByteArrayBuilder(64)
         val flags6 = ByteArrayBuilder(16)
+        var numAdded = 0
         for (p in added) {
+            if (numAdded >= maxAdded) break
             if (p.isV4) {
                 writeEndpoint(added4, p)
                 flags4.append((p.flags and 0xFF).toByte())
+                numAdded++
             } else if (p.isV6) {
                 writeEndpoint(added6, p)
                 flags6.append((p.flags and 0xFF).toByte())
+                numAdded++
             }
         }
 
@@ -333,5 +404,121 @@ object UtPex {
             ip[i] = v.toByte()
         }
         return PexPeer(ip, port, flags)
+    }
+
+    // --- diff builder (the session-facing API) --------------------------------
+
+    /**
+     * The result of a [Builder.tick]: the [Message] to send plus the set of
+     * (`ip`,`port`) keys that were sent as `added`, so the caller can record what
+     * the remote now knows. [Builder] already tracks this internally, but exposing
+     * it lets the session log or audit.
+     *
+     * @property message the encoded-ready PEX [Message] (added + dropped lists).
+     * @property addedCount how many peers landed in `added` (after the cap).
+     * @property droppedCount how many peers landed in `dropped`.
+     */
+    data class BuildResult(
+        val message: Message,
+        val addedCount: Int,
+        val droppedCount: Int,
+    )
+
+    /**
+     * Stateful per-connection PEX differ — the port of `ut_pex_plugin`'s
+     * `m_old_peers` bookkeeping. The session holds one [Builder] per peer
+     * connection (the peer we gossip *to*) and calls [tick] roughly once a minute
+     * with the *current* swarm membership; the builder emits only the delta versus
+     * what it sent last time:
+     *
+     *  - peers in the current set but not previously sent → `added` (with flags);
+     *  - peers previously sent but no longer in the current set → `dropped`.
+     *
+     * This mirrors `ut_pex_plugin::tick`, which inserts every still-connected peer
+     * into the fresh `m_old_peers`, treats those absent from the previous
+     * `m_old_peers` as added, and treats the leftover previous entries as dropped.
+     *
+     * The `added` list is capped at [maxAdded] ([MAX_ADDED_ENTRIES] by default);
+     * peers that don't fit this tick stay un-sent and will be picked up next tick
+     * (they remain absent from the recorded "old" set). `dropped` is never capped.
+     *
+     * Identity is the (`ip`,`port`) endpoint only — flags are not part of the key,
+     * so a peer that merely flips its seed bit is not re-advertised.
+     *
+     * Not thread-safe; call [tick] from the single coroutine that owns the
+     * connection.
+     */
+    class Builder(val maxAdded: Int = MAX_ADDED_ENTRIES) {
+
+        // endpoints we have already told the remote about, keyed by ip+port.
+        private val old = HashMap<EndpointKey, PexPeer>()
+
+        /** Endpoints previously advertised, for inspection/testing. */
+        val knownCount: Int get() = old.size
+
+        /**
+         * Compute and record the next PEX delta against [current] — the peers we
+         * *should* be advertising right now (already filtered by the caller to
+         * "proper bittorrent peers we're willing to share", as `send_peer` does in
+         * libtorrent). Flags on each [current] peer should be built via
+         * [PexFlags.build].
+         *
+         * Returns the [BuildResult] to encode and send. After this call the
+         * builder's internal "known" set reflects exactly the peers in [current]
+         * that fit under the [maxAdded] cap (plus those already known) — so the
+         * next tick diffs correctly.
+         */
+        fun tick(current: Collection<PexPeer>): BuildResult {
+            // start from the previous "old" set; we'll carve dropped out of it.
+            val dropped = HashMap<EndpointKey, PexPeer>(old)
+            val added = ArrayList<PexPeer>()
+            var numAdded = 0
+
+            for (p in current) {
+                val key = EndpointKey(p)
+                if (old.containsKey(key)) {
+                    // still connected since last message -> not dropped
+                    dropped.remove(key)
+                } else {
+                    // new since last message -> added, subject to the cap
+                    if (numAdded >= maxAdded) continue
+                    added.add(p)
+                    numAdded++
+                }
+            }
+
+            // commit: everything still-known minus drops, plus the newly added.
+            for (key in dropped.keys) old.remove(key)
+            for (p in added) old[EndpointKey(p)] = p
+
+            val droppedPeers = dropped.values.map { PexPeer(it.ip, it.port, 0) }
+            return BuildResult(
+                message = Message(added = added, dropped = droppedPeers),
+                addedCount = added.size,
+                droppedCount = droppedPeers.size,
+            )
+        }
+
+        /** Encode the next delta directly to wire bytes — [tick] then [encode]. */
+        fun tickEncoded(current: Collection<PexPeer>): ByteArray {
+            val r = tick(current)
+            return encode(r.message.added, r.message.dropped, includeEmpty = true, maxAdded = maxAdded)
+        }
+
+        /** Forget all previously-sent peers (e.g. after a reconnect). */
+        fun reset() = old.clear()
+    }
+
+    /** Endpoint identity (ip + port, flags-insensitive) used by [Builder]'s sets. */
+    private class EndpointKey(val ip: ByteArray, val port: Int) {
+        constructor(p: PexPeer) : this(p.ip, p.port)
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is EndpointKey) return false
+            return port == other.port && ip.contentEquals(other.ip)
+        }
+
+        override fun hashCode(): Int = 31 * ip.contentHashCode() + port
     }
 }

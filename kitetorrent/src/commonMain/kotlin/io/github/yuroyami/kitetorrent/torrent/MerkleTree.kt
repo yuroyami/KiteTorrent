@@ -313,8 +313,235 @@ class MerkleTree(
         return blockVerified[blockIndex]
     }
 
+    /**
+     * True if every block belonging to `pieceIndex` has been verified against the
+     * root. A piece is considered verified once all of its (real) constituent
+     * block hashes are verified. Mirrors `merkle_tree::blocks_verified` collapsed
+     * to a single piece. For single-block pieces this is just [isBlockVerified].
+     *
+     * @param pieceIndex the piece, in `[0, numPieces())`.
+     */
+    fun isPieceVerified(pieceIndex: Int): Boolean {
+        require(pieceIndex in 0 until numPieces()) {
+            "piece index $pieceIndex out of range [0,${numPieces()})"
+        }
+        val bpp = blocksPerPiece()
+        val start = pieceIndex shl blocksPerPieceLog
+        val end = minOf(numBlocks, start + bpp)
+        for (b in start until end) if (!blockVerified[b]) return false
+        return start < end
+    }
+
     /** True if every block hash has been verified. From `is_complete` (full-tree). */
     fun isComplete(): Boolean = blockVerified.allSet()
+
+    /**
+     * Loads a file's whole **piece layer** (the per-piece roots) and validates it
+     * against the [expectedRoot] before committing. On success the piece layer and
+     * all of its ancestors up to the root are filled in (the block layer below the
+     * piece layer is left as padding/unknown — only piece-level and above become
+     * meaningful, exactly like libtorrent's `mode_t::piece_layer`).
+     *
+     * Direct analogue of `merkle_tree::load_piece_layer`: it returns `false` (and
+     * mutates nothing) when the supplied layer is the wrong size or fails to fold
+     * up to the known root.
+     *
+     * @param pieces exactly [numPieces] piece hashes, in order.
+     * @return true if the piece layer validated and was loaded.
+     */
+    fun loadPieceLayer(pieces: List<Sha256Hash>): Boolean {
+        if (!verifyPieceLayer(pieces)) return false
+        fillFromPieces(pieces)
+        return true
+    }
+
+    /**
+     * Loads a single **piece-layer row** for this file: the contiguous run of piece
+     * roots `pieces`, the first of which is piece number `startPiece`. Each supplied
+     * piece root is written into its piece-layer slot. The interior nodes are *not*
+     * recomputed (an enclosing proof or a later full [loadPieceLayer] establishes
+     * verification); this is the building-block libtorrent uses when filling the
+     * tree row-by-row from `get_hashes` responses.
+     *
+     * @param startPiece index of the first supplied piece (>= 0).
+     * @param pieces the run of piece roots, in order. `startPiece + pieces.size`
+     *   must not exceed [numPieces].
+     */
+    fun loadPieceLayerRow(startPiece: Int, pieces: List<Sha256Hash>) {
+        require(startPiece >= 0) { "startPiece must be >= 0, was $startPiece" }
+        require(startPiece + pieces.size <= numPieces()) {
+            "piece row [$startPiece,${startPiece + pieces.size}) exceeds numPieces ${numPieces()}"
+        }
+        val base = pieceLayerStart()
+        for (i in pieces.indices) tree[base + startPiece + i] = pieces[i]
+    }
+
+    /**
+     * Verifies a run of a single piece's block-leaf hashes against that piece's
+     * already-known piece-layer root, without marking anything. Folds the supplied
+     * leaves (padded as needed) and compares to the stored piece root.
+     *
+     * @param pieceIndex the piece whose leaves these are, in `[0, numPieces())`.
+     * @param leaves the piece's block hashes, in order. Up to [blocksPerPiece]
+     *   entries; a short trailing run is padded with the all-zero block hash.
+     * @return true iff the leaves fold to the stored (non-zero) piece root.
+     */
+    fun verifyPieceLeaves(pieceIndex: Int, leaves: List<Sha256Hash>): Boolean {
+        require(pieceIndex in 0 until numPieces()) {
+            "piece index $pieceIndex out of range [0,${numPieces()})"
+        }
+        require(leaves.isNotEmpty()) { "need at least one leaf" }
+        val bpp = blocksPerPiece()
+        require(leaves.size <= bpp) { "too many leaves: ${leaves.size} > $bpp" }
+
+        // flat index of this piece's root in the piece layer.
+        val pieceRootIdx = pieceLayerStart() + pieceIndex
+        val pieceRoot = tree[pieceRootIdx]
+        if (pieceRoot.isAllZeros()) return false
+        if (bpp == 1) return leaves.size == 1 && leaves[0] == pieceRoot
+        // block-layer pad is the all-zero hash.
+        return Merkle.merkleRoot(leaves, ZERO) == pieceRoot
+    }
+
+    /**
+     * Verifies a BitTorrent v2 *hashes proof* against this tree and, on success,
+     * inserts the proven hashes and their uncle nodes. Pure-computation analogue of
+     * `merkle_validate_and_insert_proofs`: the run of `baseHashes` (starting at flat
+     * base-layer offset `startIndex`) is folded into a subtree root, then the
+     * `proofLayers` uncle hashes are walked upward until they reach a hash already
+     * known in this tree (or the [expectedRoot]). If the proof checks out, the
+     * subtree root, the uncle hashes, and the recomputed ancestors are written in
+     * and the function returns true; otherwise the tree is left unchanged.
+     *
+     * @param baseHashes contiguous base-layer hashes (non-empty).
+     * @param startIndex offset of the first base hash within the base layer.
+     * @param proofLayers uncle hashes bottom-up; may be empty if the subtree root
+     *   should equal the file root directly.
+     * @param padHash pad hash for the base layer (default the all-zero block pad).
+     * @return true iff the proof validated against this tree's known hashes/root.
+     */
+    fun addHashesWithProof(
+        baseHashes: List<Sha256Hash>,
+        startIndex: Int,
+        proofLayers: List<Sha256Hash>,
+        padHash: Sha256Hash = ZERO,
+    ): Boolean {
+        require(baseHashes.isNotEmpty()) { "need at least one base hash" }
+        require(startIndex >= 0) { "startIndex must be >= 0, was $startIndex" }
+
+        val pr = Merkle.computeProofRoot(baseHashes, startIndex, proofLayers, padHash)
+
+        // the proof must terminate at a hash we already trust: either the apex
+        // root, or (when proofLayers is empty) match an existing subtree node.
+        val knownRoot = root()
+        if (knownRoot.isAllZeros()) return false
+        if (pr.root != knownRoot) return false
+
+        // proof accepted; commit the subtree root and uncle hashes.
+        // place the subtree root at its flat index.
+        val leafCount = Merkle.numLeafs(baseHashes.size)
+        val subtreeLayers = Merkle.numLayers(leafCount)
+        // flat index of the subtree root: it lives `subtreeLayers` levels above the
+        // base layer, at offset (startIndex >> subtreeLayers) within that layer.
+        val baseLayerNo = Merkle.numLayers(numLeafs)
+        val subtreeRootLayer = baseLayerNo - subtreeLayers
+        val subtreeRootOffset = startIndex shr subtreeLayers
+        var cursor = Merkle.toFlatIndex(subtreeRootLayer, subtreeRootOffset)
+        if (cursor !in 0 until size) return false
+        tree[cursor] = pr.subtreeRoot
+
+        // walk up inserting uncle hashes and recomputed parents.
+        for (proof in proofLayers) {
+            if (cursor <= 0) break
+            val sibling = Merkle.getSibling(cursor)
+            if (sibling in 0 until size) tree[sibling] = proof
+            val parent = Merkle.getParent(cursor)
+            val left = minOf(cursor, sibling)
+            if (left + 1 < size) tree[parent] = Merkle.hashPair(tree[left], tree[left + 1])
+            cursor = parent
+        }
+        return true
+    }
+
+    /**
+     * Extracts the hashes needed to answer a BitTorrent v2 `hash_request` (BEP-52) from this
+     * tree — the inverse of [addHashesWithProof] / [Merkle.verifyProof]. Direct port of
+     * `merkle_tree::get_hashes` (`src/merkle_tree.cpp`).
+     *
+     * Given a request for `count` hashes at layer `base` (counted *up from the block layer*:
+     * `base == 0` is the block/leaf layer, `base == blocksPerPieceLog` the piece layer)
+     * starting at `index` within that layer, plus `proofLayers` of uncle hashes to anchor the
+     * run up toward the root, this returns the run of `count` hashes followed by the uncle
+     * hashes — exactly the [PeerMessage.Hashes.hashes] layout the requester folds with
+     * [Merkle.verifyProof].
+     *
+     * Returns `null` (libtorrent's empty-vector decline) when we cannot answer with hashes
+     * that are all present in our tree: any requested run node is missing (and is not an
+     * implicit zero pad), or any required proof node / sibling is missing, or the request
+     * indices fall outside the tree. We never fabricate hashes — only nodes actually present
+     * in [tree] are returned, so anything returned verifies against our known root.
+     *
+     * @param base the requested layer, counted up from the block layer (0 = block leaves).
+     * @param index offset of the first hash within the `base` layer (>= 0).
+     * @param count number of hashes to return from the `base` layer (> 0).
+     * @param proofLayers number of uncle-hash layers to append above the run.
+     * @return the run hashes followed by the proof hashes, or `null` if we cannot fully answer.
+     */
+    fun getHashes(base: Int, index: Int, count: Int, proofLayers: Int): List<Sha256Hash>? {
+        if (base < 0 || index < 0 || count <= 0 || proofLayers < 0) return null
+
+        // the layer `base` levels above the block layer, in flat-tree layer numbering
+        // (root == layer 0). num_leafs() padded leaf count gives the block-layer depth.
+        val baseLayerIdx = Merkle.numLayers(numLeafs) - base
+        if (baseLayerIdx < 0) return null
+        val layerStartIdx = Merkle.toFlatIndex(baseLayerIdx, index)
+        // the whole requested run must lie within the tree.
+        if (layerStartIdx + count > size) return null
+
+        val ret = ArrayList<Sha256Hash>(count)
+        if (base == 0) {
+            // block-layer request: real leaves are stored; beyond m_num_blocks the leaves are
+            // implicit zero padding (which we emit as the all-zero hash, matching libtorrent's
+            // block_layer fast path / resize-with-zero).
+            val blocksEnd = minOf(index + count, numBlocks)
+            var i = index
+            while (i < blocksEnd) {
+                val flat = layerStartIdx + (i - index)
+                if (tree[flat].isAllZeros()) return null
+                ret.add(tree[flat])
+                i++
+            }
+            // pad the remainder with the all-zero block hash.
+            while (ret.size < count) ret.add(ZERO)
+        } else {
+            // interior/piece layer: every requested node must be present (non-zero). Pad nodes
+            // above the block layer are non-zero (folded zero pads), so they are real entries.
+            var i = layerStartIdx
+            while (i < layerStartIdx + count) {
+                if (!hasNode(i)) return null
+                ret.add(tree[i])
+                i++
+            }
+        }
+
+        // how many layers up the tree the base-layer run itself spans (the run folds into a
+        // subtree root that many levels above the base); the base layer doesn't count.
+        val baseTreeLayers = Merkle.numLayers(Merkle.numLeafs(count)) - 1
+
+        var proofIdx = layerStartIdx
+        for (i in 0 until proofLayers) {
+            if (proofIdx <= 0) return null // requester set proof_layers too high
+            proofIdx = Merkle.getParent(proofIdx)
+            if (i >= baseTreeLayers) {
+                val sibling = Merkle.getSibling(proofIdx)
+                if (sibling !in 0 until size) return null
+                if (!hasNode(proofIdx) || !hasNode(sibling)) return null
+                ret.add(tree[sibling])
+            }
+        }
+
+        return ret
+    }
 
     /** Result of [setBlock], mirroring `merkle_tree::set_block_result`. */
     enum class SetBlockResult {

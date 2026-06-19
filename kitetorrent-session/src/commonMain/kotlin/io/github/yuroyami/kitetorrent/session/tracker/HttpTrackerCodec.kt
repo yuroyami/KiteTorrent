@@ -98,6 +98,14 @@ internal object HttpTrackerCodec {
         sb.append("&numwant=").append(req.numWant)
         sb.append("&compact=1")
         sb.append("&no_peer_id=1")
+
+        // echo the tracker-supplied "tracker id" on subsequent announces, exactly as
+        // http_tracker_connection::start() appends "&trackerid=" + escape_string(...)
+        // when tracker_req().trackerid is non-empty. The value is percent-escaped over
+        // its raw bytes like every other binary-ish field.
+        if (req.trackerId.isNotEmpty()) {
+            sb.append("&trackerid=").append(UrlEscape.escapeString(req.trackerId.encodeToByteArray()))
+        }
         return sb.toString()
     }
 
@@ -179,9 +187,18 @@ internal object HttpTrackerCodec {
             if (failure.isValid) throw TrackerFailure(failure.stringValue())
         }
 
-        val interval = root.dictFindIntValue("interval", 1800L).toInt()
+        val interval = root.dictFindIntValue("interval", AnnounceResponse.DEFAULT_INTERVAL.toLong()).toInt()
+        // BEP-3 "min interval"; libtorrent defaults it to 30s when absent
+        // (resp.min_interval = e.dict_find_int_value("min interval", 30)).
+        val minInterval = root.dictFindIntValue(
+            "min interval", AnnounceResponse.DEFAULT_MIN_INTERVAL.toLong(),
+        ).toInt()
         val seeders = root.dictFindIntValue("complete", -1L).toInt()
         val leechers = root.dictFindIntValue("incomplete", -1L).toInt()
+
+        // the optional "tracker id" we must echo on the next announce (resp.trackerid).
+        val trackerIdNode = root.dictFindString("tracker id")
+        val trackerId = if (trackerIdNode.isValid) trackerIdNode.stringValue() else ""
 
         val peers = ArrayList<PeerEndpoint>()
         decodePeers(root.dictFind("peers"), peers)
@@ -192,6 +209,8 @@ internal object HttpTrackerCodec {
             leechers = leechers,
             seeders = seeders,
             peers = peers,
+            minInterval = minInterval,
+            trackerId = trackerId,
         )
     }
 

@@ -4,6 +4,7 @@ import io.github.yuroyami.kitetorrent.Bitfield
 import io.github.yuroyami.kitetorrent.Sha1Hash
 import io.github.yuroyami.kitetorrent.protocol.Handshake
 import io.github.yuroyami.kitetorrent.protocol.PeerMessage
+import kotlinx.coroutines.CancellationException
 
 /**
  * One BitTorrent peer session over a single byte-duplex — the coroutine port of
@@ -45,14 +46,55 @@ class PeerConnection(
     private val infoHash: Sha1Hash,
     private val ourPeerId: Sha1Hash,
     numPieces: Int,
+    /**
+     * Whether *our* torrent carries BitTorrent-v2 metadata. When true we set the
+     * BEP-52 v2-upgrade bit (`reserved[7] |= 0x10`) in our outgoing handshake,
+     * advertising willingness to upgrade — exactly libtorrent's
+     * `!protocol_v2 && info_hash.has_v2()` condition in `write_handshake()`.
+     * Defaults to `false` so existing call sites keep emitting the prior wire bytes.
+     */
+    private val hasV2: Boolean = false,
 ) {
     /** The mutable choke/interest/availability state for this connection. */
     val state: PeerState = PeerState(numPieces)
 
     private val numPieces: Int get() = state.numPieces
 
+    /**
+     * The 8 reserved/capability bytes we advertise on this connection. DHT + Fast +
+     * Extension-protocol are always set (the engine honours all three: BEP-5 `port`
+     * messages, BEP-6 fast hints, BEP-10 `extended`), plus the BEP-52 v2-upgrade bit
+     * when [hasV2]. We deliberately advertise *only* bits the engine acts on, so a
+     * peer ANDing reserved blocks never over-negotiates a capability we ignore.
+     */
+    private val ourReserved: ByteArray =
+        Handshake.buildReserved(dht = true, fast = true, extended = true, v2 = hasV2)
+
     /** The remote peer's id, set once [performHandshake] succeeds; null before. */
     var remotePeerId: Sha1Hash? = null
+        private set
+
+    /**
+     * The remote peer set the BEP-52 v2-upgrade bit. Read from the peer's reserved
+     * bytes during the handshake; `false` until a handshake completes.
+     */
+    var supportsV2: Boolean = false
+        private set
+
+    /** The remote peer set the Fast-extension bit (BEP-6). Set during the handshake. */
+    var supportsFast: Boolean = false
+        private set
+
+    /** The remote peer set the DHT bit (BEP-5). Set during the handshake. */
+    var supportsDht: Boolean = false
+        private set
+
+    /** The remote peer set the extension-protocol bit (BEP-10). Set during the handshake. */
+    var supportsExtended: Boolean = false
+        private set
+
+    /** Set once [disconnect] is called or the receive loop terminates; blocks further sends. */
+    var disconnected: Boolean = false
         private set
 
     /** The remote peer's 8 reserved/capability bytes, set by [performHandshake]. */
@@ -108,9 +150,10 @@ class PeerConnection(
     suspend fun performHandshake(): HandshakeResult {
         require(!infoHash.isAllZeros()) { "cannot handshake on an all-zero info-hash" }
 
-        // 1. write our handshake (write_handshake) — default reserved bits advertise
-        //    DHT + Fast + extension protocol, exactly as libtorrent's compiled-in set.
-        conn.write(Handshake.encode(infoHash, ourPeerId))
+        // 1. write our handshake (write_handshake) — [ourReserved] advertises DHT +
+        //    Fast + extension protocol (always honoured) plus the BEP-52 v2-upgrade bit
+        //    when our torrent has v2 metadata, exactly as libtorrent's write_handshake().
+        conn.write(Handshake.encode(infoHash, ourPeerId, ourReserved))
 
         // 2. read exactly the 68 fixed bytes (read_info_hash: 28 bytes, then
         //    read_peer_id: 20 bytes — we pull the whole frame in one shot).
@@ -127,9 +170,46 @@ class PeerConnection(
             )
         }
 
+        recordRemoteCaps(hs)
+        return HandshakeResult(hs.peerId, hs.reserved, hs.supportsDht, hs.supportsFast, hs.supportsExtended)
+    }
+
+    /** Stash the remote peer-id, raw reserved bytes, and decoded capability flags. */
+    private fun recordRemoteCaps(hs: Handshake) {
         remotePeerId = hs.peerId
         remoteReserved = hs.reserved
-        return HandshakeResult(hs.peerId, hs.reserved, hs.supportsDht, hs.supportsFast, hs.supportsExtended)
+        supportsDht = hs.supportsDht
+        supportsFast = hs.supportsFast
+        supportsExtended = hs.supportsExtended
+        supportsV2 = hs.supportsV2
+    }
+
+    /**
+     * True iff the remote peer's id equals [ourPeerId] — a self-connect. libtorrent
+     * rejects these (`pid == m_our_peer_id` ⇒ `errors::self_connection`). Returns
+     * `false` until a handshake has populated [remotePeerId].
+     */
+    val isSelfConnect: Boolean get() = remotePeerId == ourPeerId
+
+    /**
+     * Mark this connection [disconnected] so any subsequent `send*` call fails fast
+     * with [ProtocolException] instead of writing onto a stream the orchestrator is
+     * about to tear down. Idempotent and safe to call from the orchestrator on a
+     * self-connect, a duplicate peer-id, or a protocol error — the analogue of
+     * libtorrent's `disconnect(...)` decision point.
+     *
+     * The underlying byte-stream/socket is owned by the orchestrator (it constructed
+     * the [TcpConnection]); closing it stays the orchestrator's responsibility, which
+     * also unblocks the [receiveLoop]'s pending `readExactly`. This call only flips the
+     * local guard so no half-frame is written in the meantime.
+     */
+    fun disconnect() {
+        disconnected = true
+    }
+
+    /** Guard every outgoing write: refuse to emit a frame after [disconnect]. */
+    private fun ensureWritable() {
+        if (disconnected) throw ProtocolException("connection to $remoteAddress is disconnected")
     }
 
     /**
@@ -145,9 +225,8 @@ class PeerConnection(
                 "info-hash mismatch: peer offered ${remote.infoHash.toHex()}, expected ${infoHash.toHex()}",
             )
         }
-        conn.write(Handshake.encode(infoHash, ourPeerId))
-        remotePeerId = remote.peerId
-        remoteReserved = remote.reserved
+        conn.write(Handshake.encode(infoHash, ourPeerId, ourReserved))
+        recordRemoteCaps(remote)
         return HandshakeResult(remote.peerId, remote.reserved, remote.supportsDht, remote.supportsFast, remote.supportsExtended)
     }
 
@@ -239,12 +318,18 @@ class PeerConnection(
     ) {
         try {
             receiveLoop(maxMessageLength, onMessage)
+        } catch (e: CancellationException) {
+            // structured-concurrency cancellation must propagate, never be swallowed:
+            // the parent scope is shutting us down. Mark the connection over and rethrow.
+            disconnected = true
+            throw e
         } catch (e: ProtocolException) {
             throw e
         } catch (e: BadFrameLengthException) {
             throw e
         } catch (_: Throwable) {
-            // end-of-stream / socket closed / cancellation: the connection is over.
+            // end-of-stream / socket closed: the connection is over normally.
+            disconnected = true
         }
     }
 
@@ -300,6 +385,18 @@ class PeerConnection(
                 "invalid bitfield size: ${bits.numBytes()} bytes, expected $expectedBytes for $numPieces pieces",
             )
         }
+        // Spare-bit conformance: the pad bits in the final byte (those beyond numPieces)
+        // MUST be zero per BEP-3. A peer that sets any spare bit is non-conformant; treat
+        // it as a protocol error rather than silently masking, so the orchestrator
+        // disconnects. The decoded bitfield is sized to expectedBytes*8, so any index in
+        // [numPieces, bits.size()) is a pad bit we can inspect directly.
+        for (i in numPieces until bits.size()) {
+            if (bits[i]) {
+                throw ProtocolException(
+                    "peer set spare bit $i in bitfield (only $numPieces pieces; pad bits must be zero)",
+                )
+            }
+        }
         state.bitfieldReceived = true
         // Copy the meaningful prefix into our correctly-sized bitfield. bits may carry
         // up to 7 extra pad bits in its final byte; theirBitfield is sized to numPieces.
@@ -317,30 +414,35 @@ class PeerConnection(
 
     /** Send `interested` and set [PeerState.amInterested] (`write_interested`). */
     suspend fun sendInterested() {
+        ensureWritable()
         if (!state.amInterested) state.amInterested = true
         conn.write(PeerMessage.Interested.encode())
     }
 
     /** Send `not_interested` and clear [PeerState.amInterested] (`write_not_interested`). */
     suspend fun sendNotInterested() {
+        ensureWritable()
         if (state.amInterested) state.amInterested = false
         conn.write(PeerMessage.NotInterested.encode())
     }
 
     /** Send `choke` and set [PeerState.amChoking] (`write_choke`). */
     suspend fun sendChoke() {
+        ensureWritable()
         if (!state.amChoking) state.amChoking = true
         conn.write(PeerMessage.Choke.encode())
     }
 
     /** Send `unchoke` and clear [PeerState.amChoking] (`write_unchoke`). */
     suspend fun sendUnchoke() {
+        ensureWritable()
         if (state.amChoking) state.amChoking = false
         conn.write(PeerMessage.Unchoke.encode())
     }
 
     /** Send `have` for [piece] (`write_have`), announcing we just completed it. */
     suspend fun sendHave(piece: Int) {
+        ensureWritable()
         require(piece in 0 until numPieces) { "have piece $piece out of range [0,$numPieces)" }
         conn.write(PeerMessage.Have(piece).encode())
     }
@@ -351,26 +453,31 @@ class PeerConnection(
      * should match the torrent's piece count.
      */
     suspend fun sendBitfield(bitfield: Bitfield) {
+        ensureWritable()
         conn.write(PeerMessage.Bitfield(bitfield).encode())
     }
 
     /** Send `have_all` (BEP-6, `write_have_all`) — used in place of a full bitfield when seeding. */
     suspend fun sendHaveAll() {
+        ensureWritable()
         conn.write(PeerMessage.HaveAll.encode())
     }
 
     /** Send `have_none` (BEP-6, `write_have_none`) — used in place of an empty bitfield. */
     suspend fun sendHaveNone() {
+        ensureWritable()
         conn.write(PeerMessage.HaveNone.encode())
     }
 
     /** Send `request` for [length] bytes at [begin] within [piece] (`write_request`). */
     suspend fun sendRequest(piece: Int, begin: Int, length: Int) {
+        ensureWritable()
         conn.write(PeerMessage.Request(piece, begin, length).encode())
     }
 
     /** Send `cancel` for a previously requested block (`write_cancel`). */
     suspend fun sendCancel(piece: Int, begin: Int, length: Int) {
+        ensureWritable()
         conn.write(PeerMessage.Cancel(piece, begin, length).encode())
     }
 
@@ -380,21 +487,25 @@ class PeerConnection(
      * request from an unchoked, interested peer.
      */
     suspend fun sendPiece(piece: Int, begin: Int, block: ByteArray) {
+        ensureWritable()
         conn.write(PeerMessage.Piece(piece, begin, block).encode())
     }
 
     /** Send `reject_request` (BEP-6, `write_reject_request`) — refuse a request we won't serve. */
     suspend fun sendRejectRequest(piece: Int, begin: Int, length: Int) {
+        ensureWritable()
         conn.write(PeerMessage.RejectRequest(piece, begin, length).encode())
     }
 
     /** Send `port` (BEP-5, `write_dht_port`) advertising our DHT UDP [port]. */
     suspend fun sendPort(port: Int) {
+        ensureWritable()
         conn.write(PeerMessage.Port(port).encode())
     }
 
     /** Send a `keep-alive` (four zero bytes, `write_keepalive`). */
     suspend fun sendKeepAlive() {
+        ensureWritable()
         conn.write(PeerMessage.KeepAlive.encode())
     }
 
@@ -404,7 +515,26 @@ class PeerConnection(
      * bencoded (+ optional appended data) extension message body.
      */
     suspend fun sendExtended(extId: Int, payload: ByteArray) {
+        ensureWritable()
         conn.write(PeerMessage.Extended(extId, payload).encode())
+    }
+
+    /** Send `hash_request` (id 21, BEP-52) — ask for merkle hashes (`write_hash_request`). */
+    suspend fun sendHashRequest(msg: PeerMessage.HashRequest) {
+        ensureWritable()
+        conn.write(msg.encode())
+    }
+
+    /** Send `hashes` (id 22, BEP-52) — the merkle hashes answering a request (`write_hashes`). */
+    suspend fun sendHashes(msg: PeerMessage.Hashes) {
+        ensureWritable()
+        conn.write(msg.encode())
+    }
+
+    /** Send `hash_reject` (id 23, BEP-52) — decline a `hash_request` (`write_hash_reject`). */
+    suspend fun sendHashReject(msg: PeerMessage.HashReject) {
+        ensureWritable()
+        conn.write(msg.encode())
     }
 
     companion object {

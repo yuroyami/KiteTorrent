@@ -64,7 +64,11 @@ class UdpTracker(
         val transactionId = newTransactionId()
         val request = UdpTrackerCodec.buildAnnounceRequest(connectionId, transactionId, req)
         val response = transact(host, port, request, transactionId, UdpTrackerCodec.ACTION_ANNOUNCE)
-        return UdpTrackerCodec.parseAnnounceResponse(response, transactionId)
+        // libtorrent picks the peer stride from the *endpoint family* it sent the
+        // announce to (on_announce_response branches on the resolved address): an IPv6
+        // tracker returns 18-byte (16+2) compact peers, an IPv4 tracker 6-byte (4+2).
+        // We key off whether [host] is an IPv6 literal.
+        return UdpTrackerCodec.parseAnnounceResponse(response, transactionId, ipv6 = isIpv6Host(host))
             ?: throw TorrentException(LibtorrentError.INVALID_TRACKER_RESPONSE_LENGTH)
     }
 
@@ -197,4 +201,12 @@ class UdpTracker(
         if (id == 0) id = 1
         return id
     }
+
+    /**
+     * Whether [host] is an IPv6 literal, used to choose the BEP-15 compact-peer stride
+     * (18 bytes for v6, 6 for v4). An IPv6 literal is the only host form that contains a
+     * colon — IPv4 dotted-quads and DNS names never do — so a `:` is a sufficient test.
+     * A bracketed literal (`[2001:db8::1]`) also qualifies.
+     */
+    private fun isIpv6Host(host: String): Boolean = host.indexOf(':') >= 0
 }

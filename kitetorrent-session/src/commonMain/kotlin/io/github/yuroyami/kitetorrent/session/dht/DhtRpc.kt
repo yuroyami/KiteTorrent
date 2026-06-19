@@ -8,7 +8,7 @@ import io.github.yuroyami.kitetorrent.session.net.DatagramTransport
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
-import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CancellationException
 import kotlin.random.Random
 
 /**

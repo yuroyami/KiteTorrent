@@ -1,6 +1,7 @@
 package io.github.yuroyami.kitetorrent.alert
 
 import io.github.yuroyami.kitetorrent.Sha1Hash
+import io.github.yuroyami.kitetorrent.torrent.resume.AddTorrentParams
 
 /**
  * Concrete torrent status/storage/error alerts ported from
@@ -259,12 +260,17 @@ data class MetadataFailedAlert(
  * Generated as a response to `save_resume_data()` once the resume state has been
  * written. Ported from `libtorrent::save_resume_data_alert` (alert_type 37).
  *
- * In libtorrent this carries the populated `add_torrent_params`; KiteTorrent v0
- * has no resume-data model yet, so the payload is omitted and only the rendered
- * message is reproduced. This alert is non-discardable.
+ * In libtorrent this carries the populated `add_torrent_params` (the `params`
+ * member); KiteTorrent reproduces that with [params], the resume-data
+ * [AddTorrentParams] from which `write_resume_data()` round-trips. Clients hand
+ * this object (or its serialised form) back to `add_torrent()` to restore the
+ * torrent. This alert is non-discardable.
+ *
+ * @property params the resume payload describing how to re-add this torrent.
  */
 data class SaveResumeDataAlert(
     override val torrentName: String?,
+    val params: AddTorrentParams = AddTorrentParams(),
 ) : TorrentAlert() {
     override val type: Int get() = ALERT_TYPE
     override val what: String get() = "save_resume_data"
@@ -293,4 +299,110 @@ data class SaveResumeDataFailedAlert(
         torrentPrefix() + " resume data was not generated: " + errorMessage
 
     companion object { const val ALERT_TYPE: Int = 38 }
+}
+
+/**
+ * Posted in response to `read_piece()` once the asynchronous read completes.
+ * Ported from `libtorrent::read_piece_alert` (alert_type 5). Non-discardable.
+ *
+ * On success [buffer] holds the full piece payload and [errorMessage] is `null`;
+ * on failure the torrent is paused, [buffer] is `null` and [errorMessage]
+ * describes what went wrong. libtorrent renders
+ * `<name>: read_piece <piece> successful` or `<name>: read_piece <piece> failed: <error>`.
+ *
+ * @property pieceIndex the index of the piece that was read.
+ * @property buffer the piece data on success, or `null` on failure.
+ * @property size the number of bytes read (the piece size on success).
+ * @property errorMessage the failure description, or `null` on success.
+ */
+data class ReadPieceAlert(
+    override val torrentName: String?,
+    val pieceIndex: Int,
+    val buffer: ByteArray? = null,
+    val size: Int = 0,
+    val errorMessage: String? = null,
+) : TorrentAlert() {
+    override val type: Int get() = ALERT_TYPE
+    override val what: String get() = "read_piece"
+    override val category: Int get() = AlertCategory.storage
+
+    override fun message(): String =
+        if (!errorMessage.isNullOrEmpty())
+            torrentPrefix() + ": read_piece " + pieceIndex + " failed: " + errorMessage
+        else
+            torrentPrefix() + ": read_piece " + pieceIndex + " successful"
+
+    // [buffer] is a ByteArray, so override structural equals/hashCode like other
+    // byte-array-carrying data classes in this catalogue.
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ReadPieceAlert) return false
+        return torrentName == other.torrentName && pieceIndex == other.pieceIndex &&
+            size == other.size && errorMessage == other.errorMessage &&
+            contentEqualsNullable(buffer, other.buffer)
+    }
+
+    override fun hashCode(): Int {
+        var h = torrentName?.hashCode() ?: 0
+        h = 31 * h + pieceIndex
+        h = 31 * h + size
+        h = 31 * h + (errorMessage?.hashCode() ?: 0)
+        h = 31 * h + (buffer?.contentHashCode() ?: 0)
+        return h
+    }
+
+    companion object {
+        const val ALERT_TYPE: Int = 5
+
+        private fun contentEqualsNullable(a: ByteArray?, b: ByteArray?): Boolean =
+            if (a == null || b == null) a === b else a.contentEquals(b)
+    }
+}
+
+/**
+ * A minimal snapshot of a torrent's runtime state, the pure-Kotlin stand-in for
+ * the slice of `libtorrent::torrent_status` (include/libtorrent/torrent_status.hpp)
+ * that [StateUpdateAlert] carries. Only the headline fields clients typically poll
+ * are modelled; the full C++ struct has many more.
+ *
+ * @property infoHash the v1 info-hash identifying the torrent.
+ * @property state the torrent's current state.
+ * @property progress fraction of wanted data downloaded, 0.0..1.0 (`torrent_status::progress`).
+ * @property totalDone bytes of wanted data downloaded and verified (`total_done`).
+ * @property downloadRate current payload download rate in bytes/sec (`download_payload_rate`).
+ * @property uploadRate current payload upload rate in bytes/sec (`upload_payload_rate`).
+ * @property numPeers number of connected peers (`num_peers`).
+ * @property numSeeds number of connected peers that are seeds (`num_seeds`).
+ */
+data class TorrentStatus(
+    val infoHash: Sha1Hash,
+    val state: TorrentState,
+    val progress: Float = 0f,
+    val totalDone: Long = 0L,
+    val downloadRate: Int = 0,
+    val uploadRate: Int = 0,
+    val numPeers: Int = 0,
+    val numSeeds: Int = 0,
+)
+
+/**
+ * Posted in response to `post_torrent_updates()`, carrying the status of every
+ * torrent that changed since the last such post. Ported from
+ * `libtorrent::state_update_alert` (alert_type 68). Not subject to alert-mask
+ * filtering (it is only ever posted on request).
+ *
+ * libtorrent renders `state updates for <n> torrents`.
+ *
+ * @property status the changed torrents' status snapshots.
+ */
+data class StateUpdateAlert(
+    val status: List<TorrentStatus>,
+) : Alert() {
+    override val type: Int get() = ALERT_TYPE
+    override val what: String get() = "state_update"
+    override val category: Int get() = AlertCategory.status
+
+    override fun message(): String = "state updates for " + status.size + " torrents"
+
+    companion object { const val ALERT_TYPE: Int = 68 }
 }

@@ -91,6 +91,62 @@ data class TrackerErrorAlert(
 }
 
 /**
+ * Generated when a scrape request to a tracker succeeds. Ported from
+ * `libtorrent::scrape_reply_alert` (alert_type 13). Non-discardable.
+ *
+ * libtorrent renders `<tracker-prefix> <v1|v2> scrape reply: <incomplete> <complete>`
+ * (note: incomplete is printed before complete). Either count may be `-1` if the
+ * tracker's response was malformed.
+ *
+ * @property incomplete number of non-seed peers (leechers) reported, or `-1` if unknown.
+ * @property complete number of seeds reported, or `-1` if unknown.
+ * @property version the BitTorrent protocol version that was scraped.
+ */
+data class ScrapeReplyAlert(
+    override val torrentName: String?,
+    override val trackerUrl: String,
+    override val localEndpoint: String,
+    val incomplete: Int,
+    val complete: Int,
+    val version: ProtocolVersion = ProtocolVersion.V1,
+) : TrackerAlert() {
+    override val type: Int get() = ALERT_TYPE
+    override val what: String get() = "scrape_reply"
+    override val category: Int get() = AlertCategory.tracker
+
+    override fun message(): String =
+        trackerPrefix() + " " + version.label + " scrape reply: " + incomplete + " " + complete
+
+    companion object { const val ALERT_TYPE: Int = 13 }
+}
+
+/**
+ * Generated when a scrape request fails (tracker timeout, refused connection or
+ * an HTTP error response). Ported from `libtorrent::scrape_failed_alert`
+ * (alert_type 14). Non-discardable.
+ *
+ * libtorrent renders `<tracker-prefix> scrape failed: <errorMessage>`.
+ *
+ * @property errorMessage the description of why the scrape failed (the tracker's
+ *   failure message when present, otherwise the system error text).
+ */
+data class ScrapeFailedAlert(
+    override val torrentName: String?,
+    override val trackerUrl: String,
+    override val localEndpoint: String,
+    val errorMessage: String,
+) : TrackerAlert() {
+    override val type: Int get() = ALERT_TYPE
+    override val what: String get() = "scrape_failed"
+    override val category: Int get() = AlertCategory.tracker or AlertCategory.error
+
+    override fun message(): String =
+        trackerPrefix() + " scrape failed: " + errorMessage
+
+    companion object { const val ALERT_TYPE: Int = 14 }
+}
+
+/**
  * Triggered when the tracker reply contains a warning field. The announce
  * usually succeeded but the tracker has a message for the client. Ported from
  * `libtorrent::tracker_warning_alert` (alert_type 12).

@@ -12,9 +12,21 @@ import kotlinx.coroutines.sync.withLock
  * is closed, which is libtorrent's `too_many_connections` disconnect. The slot is
  * returned on disconnect ([release]).
  */
-class ConnectionBudget(val limit: Int) {
+class ConnectionBudget(limit: Int) {
     private val lock = Mutex()
     private var inUse = 0
+
+    /**
+     * The cap, mutable so a live `connections_limit` change (`apply_settings`) takes effect on
+     * the running session rather than only future torrents. Updated under [lock] via [setLimit].
+     */
+    var limit: Int = limit
+        private set
+
+    /** Apply a new `connections_limit` live; excess in-use slots drain as peers disconnect. */
+    suspend fun setLimit(newLimit: Int) {
+        lock.withLock { limit = newLimit }
+    }
 
     /** Take a connection slot; false (and no slot) when the session is full. */
     suspend fun tryAcquire(): Boolean = lock.withLock {

@@ -284,6 +284,42 @@ class NatPmp(
     }
 
     /**
+     * The outcome of a successful [mapDetailed]: the public port the gateway granted
+     * and the lease lifetime it actually assigned (which may differ from what was
+     * requested — `on_reply` adopts both `public_port` and `lifetime` from the
+     * response). The engine schedules its lease-refresh timer from [lifetimeSeconds].
+     */
+    data class MapGrant(
+        val tcp: Boolean,
+        val internalPort: Int,
+        val externalPort: Int,
+        val lifetimeSeconds: Long,
+    )
+
+    /**
+     * Like [map], but returns the full grant — the granted external port **and** the
+     * lifetime the gateway assigned — so the engine can drive its refresh timer.
+     * Mirrors the same `send_map_request` → `on_reply` transaction.
+     *
+     * Returns `null` if the gateway never answered within [maxAttempts] retransmissions
+     * or replied with a non-zero result code. Pass [lifetimeSeconds] = 0 to delete.
+     */
+    suspend fun mapDetailed(
+        internalPort: Int,
+        externalPort: Int,
+        tcp: Boolean,
+        lifetimeSeconds: Int = 3600,
+    ): MapGrant? {
+        val request = NatPmpCodec.buildMapRequest(internalPort, externalPort, tcp, lifetimeSeconds)
+        val reply = transact(request) { packet ->
+            val parsed = NatPmpCodec.parseMapResponse(packet)
+            if (parsed != null && parsed.tcp == tcp && parsed.internalPort == internalPort) parsed else null
+        } ?: return null
+        if (!reply.isSuccess) return null
+        return MapGrant(reply.tcp, reply.internalPort, reply.externalPort, reply.lifetimeSeconds)
+    }
+
+    /**
      * Send [request] to the gateway and return the first datagram (from the gateway)
      * that [accept] parses into a non-null result, retransmitting with linear
      * back-off up to [maxAttempts] times. Datagrams from any other source, or that

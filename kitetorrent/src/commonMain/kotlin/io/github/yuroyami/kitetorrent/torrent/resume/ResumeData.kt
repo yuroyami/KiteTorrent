@@ -31,10 +31,11 @@ import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
  * string is one byte per piece with bit 0 = "have" and bit 1 = "verified", and a peer
  * list is the concatenation of `address-bytes ++ big-endian-uint16-port`.
  *
- * Scope: the v2 merkle-tree `trees` key is not emitted or parsed here (see the note on
- * [AddTorrentParams]); everything else in the C++ functions for the non-deprecated
- * build (`TORRENT_ABI_VERSION != 1`, share-mode and super-seeding enabled, i2p
- * disabled) is reproduced.
+ * Scope: everything in the C++ functions for the non-deprecated build
+ * (`TORRENT_ABI_VERSION != 1`, share-mode and super-seeding enabled, i2p disabled) is
+ * reproduced, including the v2 merkle-tree `trees` key (each entry a
+ * `{ "hashes", "verified", "mask" }` dict), the DHT bootstrap `nodes` list and a
+ * `complete_sent` flag.
  */
 object ResumeData {
 
@@ -94,6 +95,11 @@ object ResumeData {
         d["disable_lsd"] = boolEntry(atp.hasFlag(TorrentFlags.DISABLE_LSD))
         d["disable_pex"] = boolEntry(atp.hasFlag(TorrentFlags.DISABLE_PEX))
 
+        // whether a `completed` tracker announce was already sent (per-endpoint
+        // complete_sent / torrent::m_complete_sent). Not a libtorrent resume key, but an
+        // additive 0/1 flag libtorrent harmlessly ignores; preserved for lossless resume.
+        d["complete_sent"] = boolEntry(atp.completeSent)
+
         d["added_time"] = Entry.of(atp.addedTime)
         d["completed_time"] = Entry.of(atp.completedTime)
 
@@ -119,6 +125,36 @@ object ResumeData {
                 ti.creationDate?.takeIf { it != 0L }?.let { d["creation date"] = Entry.of(it) }
                 ti.createdBy?.takeIf { it.isNotEmpty() }?.let { d["created by"] = Entry.of(it) }
             }
+        }
+
+        // v2 merkle trees: a list (indexed by file) of {hashes, verified, mask} dicts.
+        // `hashes` is the concatenation of the 32-byte SHA-256 node hashes; `verified`
+        // and `mask` are per-bit '1'/'0' strings (the file-version-1 encoding this writer
+        // emits). Mirrors the `trees` block of write_resume_data.
+        if (atp.merkleTrees.isNotEmpty()) {
+            val retTrees = Entry.list()
+            for (f in atp.merkleTrees.indices) {
+                val tree = atp.merkleTrees[f]
+                val treeDict = Entry.dict()
+                val td = treeDict.dict()
+
+                val hashes = ByteArrayBuilder(tree.size * 32)
+                for (n in tree) hashes.append(n.toByteArray())
+                td["hashes"] = Entry.of(hashes.toByteArray())
+
+                val verified = atp.verifiedLeafHashes.getOrNull(f)
+                if (verified != null && verified.isNotEmpty()) {
+                    td["verified"] = Entry.of(boolBitStringChars(verified))
+                }
+
+                val mask = atp.merkleTreeMask.getOrNull(f)
+                if (mask != null && mask.isNotEmpty()) {
+                    td["mask"] = Entry.of(boolBitStringChars(mask))
+                }
+
+                retTrees.items.add(treeDict)
+            }
+            d["trees"] = retTrees
         }
 
         // unfinished pieces: a list of {piece, bitmask} dicts, in ascending piece order
@@ -148,6 +184,19 @@ object ResumeData {
         val httpSeeds = Entry.list()
         for (u in atp.httpSeeds) httpSeeds.items.add(Entry.of(u))
         d["httpseeds"] = httpSeeds
+
+        // DHT bootstrap nodes: a list of [host, port] pairs (the `nodes` key, as in
+        // write_torrent_file). Emitted only when present so old/empty data is unaffected.
+        if (atp.dhtNodes.isNotEmpty()) {
+            val nodes = Entry.list()
+            for ((host, port) in atp.dhtNodes) {
+                val node = Entry.list()
+                node.items.add(Entry.of(host))
+                node.items.add(Entry.of(port.toLong()))
+                nodes.items.add(node)
+            }
+            d["nodes"] = nodes
+        }
 
         // pieces bitmask: one byte per piece, bit0 = have, bit1 = verified.
         val pieceCount = maxOf(atp.havePieces.size(), atp.verifiedPieces.size())
@@ -272,6 +321,58 @@ object ResumeData {
                 throw TorrentException(LibtorrentError.MISMATCHING_INFO_HASH)
             }
         }
+
+        // v2 merkle trees. The three per-file vectors are kept the same length, as the
+        // C++ asserts: every tree entry pushes a (possibly empty) verified/mask entry too.
+        val merkleTrees = ArrayList<List<Digest32>>()
+        val verifiedLeafHashes = ArrayList<List<Boolean>>()
+        val merkleTreeMask = ArrayList<List<Boolean>>()
+        val treesNode = rd.dictFindList("trees")
+        if (treesNode.isValid) {
+            for (i in 0 until treesNode.listSize()) {
+                val de = treesNode.listAt(i)
+                if (de.type != BdecodeNode.Type.DICT) break
+                val dh = de.dictFindString("hashes")
+                if (!dh.isValid) break
+                val hashBytes = dh.stringBytes()
+                if (hashBytes.size % 32 != 0) break
+
+                val nodes = ArrayList<Digest32>(hashBytes.size / 32)
+                var off = 0
+                while (off < hashBytes.size) {
+                    nodes.add(Digest32.sha256(hashBytes.copyOfRange(off, off + 32)))
+                    off += 32
+                }
+                merkleTrees.add(nodes)
+
+                val verifiedNodeT = de.dictFindString("verified")
+                verifiedLeafHashes.add(
+                    if (verifiedNodeT.isValid) decodeBoolBits(verifiedNodeT.stringBytes(), fileVersion)
+                    else emptyList()
+                )
+
+                val maskNode = de.dictFindString("mask")
+                merkleTreeMask.add(
+                    if (maskNode.isValid) decodeBoolBits(maskNode.stringBytes(), fileVersion)
+                    else emptyList()
+                )
+            }
+        }
+
+        // DHT bootstrap nodes: a list of [host, port] pairs (the `nodes` key).
+        val dhtNodes = ArrayList<Pair<String, Int>>()
+        val nodesNode = rd.dictFindList("nodes")
+        if (nodesNode.isValid) {
+            for (i in 0 until nodesNode.listSize()) {
+                val node = nodesNode.listAt(i)
+                if (node.type != BdecodeNode.Type.LIST || node.listSize() < 2) continue
+                val host = node.listStringValueAt(0)
+                val port = node.listIntValueAt(1).toInt()
+                if (host.isNotEmpty()) dhtNodes.add(host to port)
+            }
+        }
+
+        val completeSent = rd.dictFindIntValue("complete_sent", 0) != 0L
 
         val totalUploaded = rd.dictFindIntValue("total_uploaded")
         val totalDownloaded = rd.dictFindIntValue("total_downloaded")
@@ -463,6 +564,11 @@ object ResumeData {
             verifiedPieces = verifiedPieces,
             unfinishedPieces = unfinishedPieces,
             renamedFiles = renamedFiles,
+            merkleTrees = merkleTrees,
+            merkleTreeMask = merkleTreeMask,
+            verifiedLeafHashes = verifiedLeafHashes,
+            dhtNodes = dhtNodes,
+            completeSent = completeSent,
             flags = flags,
             storageModeAllocate = storageAllocate,
             maxUploads = maxUploads,
@@ -488,6 +594,26 @@ object ResumeData {
     // ---- helpers -------------------------------------------------------------
 
     private fun boolEntry(b: Boolean): Entry = Entry.of(if (b) 1L else 0L)
+
+    /**
+     * Encode a bool vector as the file-version-1 `'1'`/`'0'` char string libtorrent
+     * writes for the `verified` / `mask` tree sub-keys (one ASCII byte per bit).
+     */
+    private fun boolBitStringChars(bits: List<Boolean>): ByteArray =
+        ByteArray(bits.size) { if (bits[it]) '1'.code.toByte() else '0'.code.toByte() }
+
+    /**
+     * Decode a tree `verified`/`mask` sub-key into a bool list. Matches the C++ split on
+     * [fileVersion]: version 1 is one ASCII `'1'`/`'0'` char per bit; version 2 packs 8
+     * bits per byte, MSB-first (`0x80 >> (j % 8)`).
+     */
+    private fun decodeBoolBits(bytes: ByteArray, fileVersion: Long): List<Boolean> {
+        if (fileVersion == 1L) {
+            return List(bytes.size) { bytes[it] == '1'.code.toByte() }
+        }
+        val n = bytes.size * 8
+        return List(n) { j -> (bytes[j / 8].toInt() and (0x80 ushr (j % 8))) != 0 }
+    }
 
     /** Clamp a raw priority byte into libtorrent's `[dont_download, top_priority]` range. */
     private fun clampPriority(v: Int): Int = when {

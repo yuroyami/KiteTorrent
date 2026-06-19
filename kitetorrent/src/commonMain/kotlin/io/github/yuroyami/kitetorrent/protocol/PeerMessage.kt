@@ -211,6 +211,125 @@ sealed class PeerMessage {
     }
 
     /**
+     * `hash_request` (id 21, BEP-52): ask the peer for a range of v2 Merkle-tree
+     * hashes. The payload is a fixed 48-byte header:
+     * `[pieces_root 32 bytes][int32 base][int32 index][int32 length][int32 proof_layers]`.
+     * On the wire: `[len=49][21][header]`. Mirrors `write_hash_request` /
+     * `on_hash_request` in `bt_peer_connection.cpp` (the C++ `hash_request` carries
+     * `file`/`base`/`index`/`count`/`proof_layers`; the file is identified on the wire
+     * by its `pieces_root`, and `count` is named [length] here).
+     */
+    data class HashRequest(
+        val piecesRoot: ByteArray,
+        val baseLayer: Int,
+        val index: Int,
+        val length: Int,
+        val proofLayers: Int,
+    ) : PeerMessage() {
+        override val id: Int get() = MessageId.HASH_REQUEST
+        override fun encode(): ByteArray = encodeHashHeader(id, piecesRoot, baseLayer, index, length, proofLayers, null)
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is HashRequest) return false
+            return baseLayer == other.baseLayer && index == other.index &&
+                length == other.length && proofLayers == other.proofLayers &&
+                piecesRoot.contentEquals(other.piecesRoot)
+        }
+
+        override fun hashCode(): Int {
+            var h = piecesRoot.contentHashCode()
+            h = h * 31 + baseLayer
+            h = h * 31 + index
+            h = h * 31 + length
+            h = h * 31 + proofLayers
+            return h
+        }
+
+        override fun toString(): String =
+            "HashRequest(piecesRoot.size=${piecesRoot.size}, baseLayer=$baseLayer, index=$index, length=$length, proofLayers=$proofLayers)"
+    }
+
+    /**
+     * `hashes` (id 22, BEP-52): the response to a [HashRequest], carrying the requested
+     * range of 32-byte SHA-256 Merkle hashes. The payload is the same 48-byte header as
+     * [HashRequest] followed by N concatenated 32-byte [hashes]. On the wire:
+     * `[len=49+32*N][22][header][hash...]`. Mirrors `write_hashes` / `on_hashes`.
+     */
+    data class Hashes(
+        val piecesRoot: ByteArray,
+        val baseLayer: Int,
+        val index: Int,
+        val length: Int,
+        val proofLayers: Int,
+        val hashes: List<ByteArray>,
+    ) : PeerMessage() {
+        override val id: Int get() = MessageId.HASHES
+        override fun encode(): ByteArray = encodeHashHeader(id, piecesRoot, baseLayer, index, length, proofLayers, hashes)
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Hashes) return false
+            if (baseLayer != other.baseLayer || index != other.index ||
+                length != other.length || proofLayers != other.proofLayers
+            ) return false
+            if (!piecesRoot.contentEquals(other.piecesRoot)) return false
+            if (hashes.size != other.hashes.size) return false
+            for (i in hashes.indices) if (!hashes[i].contentEquals(other.hashes[i])) return false
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var h = piecesRoot.contentHashCode()
+            h = h * 31 + baseLayer
+            h = h * 31 + index
+            h = h * 31 + length
+            h = h * 31 + proofLayers
+            for (hash in hashes) h = h * 31 + hash.contentHashCode()
+            return h
+        }
+
+        override fun toString(): String =
+            "Hashes(piecesRoot.size=${piecesRoot.size}, baseLayer=$baseLayer, index=$index, length=$length, proofLayers=$proofLayers, hashes.size=${hashes.size})"
+    }
+
+    /**
+     * `hash_reject` (id 23, BEP-52): refuse a [HashRequest]. The payload is the identical
+     * 48-byte header as [HashRequest], with no trailing hashes. On the wire:
+     * `[len=49][23][header]`. Mirrors `write_hash_reject` / `on_hash_reject`.
+     */
+    data class HashReject(
+        val piecesRoot: ByteArray,
+        val baseLayer: Int,
+        val index: Int,
+        val length: Int,
+        val proofLayers: Int,
+    ) : PeerMessage() {
+        override val id: Int get() = MessageId.HASH_REJECT
+        override fun encode(): ByteArray = encodeHashHeader(id, piecesRoot, baseLayer, index, length, proofLayers, null)
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is HashReject) return false
+            return baseLayer == other.baseLayer && index == other.index &&
+                length == other.length && proofLayers == other.proofLayers &&
+                piecesRoot.contentEquals(other.piecesRoot)
+        }
+
+        override fun hashCode(): Int {
+            var h = piecesRoot.contentHashCode()
+            h = h * 31 + baseLayer
+            h = h * 31 + index
+            h = h * 31 + length
+            h = h * 31 + proofLayers
+            return h
+        }
+
+        override fun toString(): String =
+            "HashReject(piecesRoot.size=${piecesRoot.size}, baseLayer=$baseLayer, index=$index, length=$length, proofLayers=$proofLayers)"
+    }
+
+    /**
      * A frame whose message id is not one this codec recognises. libtorrent would
      * route this to a peer-plugin or drop the connection; we surface it so the caller
      * can decide. [id] is the raw id byte, [payload] is everything after it.
@@ -258,6 +377,41 @@ sealed class PeerMessage {
                 out[p++] = (v and 0xff).toByte()
             }
             return out
+        }
+
+        /** Byte width of the fixed v2 hash-message header that follows the id byte. */
+        private const val HASH_HEADER_SIZE: Int = 32 + 4 + 4 + 4 + 4 // pieces_root + base + index + length + proof_layers
+
+        /**
+         * Encode a BEP-52 v2 hash message: `[len][id][pieces_root 32][int32 base]
+         * [int32 index][int32 length][int32 proof_layers]( [hash 32]... )`. When
+         * [hashes] is non-null its 32-byte entries are appended (the `hashes` message);
+         * for `hash_request`/`hash_reject` pass null. [piecesRoot] is written verbatim;
+         * libtorrent always emits exactly 32 bytes here, so callers should supply a
+         * 32-byte root.
+         */
+        private fun encodeHashHeader(
+            id: Int,
+            piecesRoot: ByteArray,
+            baseLayer: Int,
+            index: Int,
+            length: Int,
+            proofLayers: Int,
+            hashes: List<ByteArray>?,
+        ): ByteArray {
+            var hashesBytes = 0
+            if (hashes != null) for (h in hashes) hashesBytes += h.size
+            val bodyLen = 1 + piecesRoot.size + 16 + hashesBytes // id + root + 4 int32 + hashes
+            val b = ByteArrayBuilder(4 + bodyLen)
+            ByteIo.writeUInt32BE(b, bodyLen.toLong())
+            b.append(id.toByte())
+            b.append(piecesRoot)
+            ByteIo.writeUInt32BE(b, baseLayer.toLong())
+            ByteIo.writeUInt32BE(b, index.toLong())
+            ByteIo.writeUInt32BE(b, length.toLong())
+            ByteIo.writeUInt32BE(b, proofLayers.toLong())
+            if (hashes != null) for (h in hashes) b.append(h)
+            return b.toByteArray()
         }
 
         /**
@@ -323,6 +477,41 @@ sealed class PeerMessage {
                 MessageId.EXTENDED ->
                     if (frame.size >= 2) Extended(frame[1].toInt() and 0xff, frame.copyOfRange(2, frame.size))
                     else Unknown(id, frame.copyOfRange(1, frame.size))
+                MessageId.HASH_REQUEST ->
+                    if (frame.size >= 1 + HASH_HEADER_SIZE) HashRequest(
+                        frame.copyOfRange(1, 33),
+                        ByteIo.readUInt32BEAsInt(frame, 33),
+                        ByteIo.readUInt32BEAsInt(frame, 37),
+                        ByteIo.readUInt32BEAsInt(frame, 41),
+                        ByteIo.readUInt32BEAsInt(frame, 45),
+                    ) else Unknown(id, frame.copyOfRange(1, frame.size))
+                MessageId.HASHES ->
+                    // header (49 bytes incl. id) then a whole number of 32-byte hashes.
+                    if (frame.size >= 1 + HASH_HEADER_SIZE && (frame.size - (1 + HASH_HEADER_SIZE)) % 32 == 0) {
+                        val count = (frame.size - (1 + HASH_HEADER_SIZE)) / 32
+                        val hashes = ArrayList<ByteArray>(count)
+                        var p = 1 + HASH_HEADER_SIZE
+                        repeat(count) {
+                            hashes.add(frame.copyOfRange(p, p + 32))
+                            p += 32
+                        }
+                        Hashes(
+                            frame.copyOfRange(1, 33),
+                            ByteIo.readUInt32BEAsInt(frame, 33),
+                            ByteIo.readUInt32BEAsInt(frame, 37),
+                            ByteIo.readUInt32BEAsInt(frame, 41),
+                            ByteIo.readUInt32BEAsInt(frame, 45),
+                            hashes,
+                        )
+                    } else Unknown(id, frame.copyOfRange(1, frame.size))
+                MessageId.HASH_REJECT ->
+                    if (frame.size >= 1 + HASH_HEADER_SIZE) HashReject(
+                        frame.copyOfRange(1, 33),
+                        ByteIo.readUInt32BEAsInt(frame, 33),
+                        ByteIo.readUInt32BEAsInt(frame, 37),
+                        ByteIo.readUInt32BEAsInt(frame, 41),
+                        ByteIo.readUInt32BEAsInt(frame, 45),
+                    ) else Unknown(id, frame.copyOfRange(1, frame.size))
                 else -> Unknown(id, frame.copyOfRange(1, frame.size))
             }
         }

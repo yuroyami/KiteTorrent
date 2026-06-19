@@ -49,6 +49,13 @@ class TorrentInfo private constructor(
     /** The exact bytes of the `info` dictionary — the info-hash preimage, and what
      *  `ut_metadata` serves to magnet peers. */
     val infoBytes: ByteArray,
+    /**
+     * BEP-52 top-level `piece layers`: each file's merkle root → the SHA-256 hash of every
+     * one of its pieces (the merkle layer at piece granularity). Present only for v2 files
+     * larger than a single piece. This is the verification anchor for a v2 download from a
+     * `.torrent` — no `hash_request` round-trip needed.
+     */
+    private val pieceLayers: Map<Sha256Hash, List<Sha256Hash>>,
 ) {
     val name: String get() = storage.name
     val pieceLength: Int get() = storage.pieceLength
@@ -70,12 +77,95 @@ class TorrentInfo private constructor(
     }
 
     /**
+     * The v2 piece hash (the merkle root of piece [index]'s 16 KiB block leaves) — the
+     * verification target for a v2 download. Comes from the `piece layers`, except a file
+     * that fits in a single piece, where the file's own merkle root is the piece hash.
+     *
+     * Single-file: index directly into the file's piece-layer row (or the file root for a
+     * one-piece file).
+     *
+     * Multi-file v2/hybrid: every file starts on a piece boundary (pad files enforce this),
+     * so the piece is mapped to its owning file via [FileStorage.fileForPiece], then to the
+     * file-relative piece index (`piece - file's first piece`). Pad files have no content
+     * hash (return null); a file spanning a single piece uses its own `pieces root`.
+     */
+    fun pieceHashV2(index: Int): Sha256Hash? {
+        if (!isV2) return null
+        if (index < 0 || index >= numPieces) return null
+
+        if (numFiles == 1) {
+            val root = files[0].piecesRoot ?: return null
+            if (numPieces == 1) return root // one-piece file: the file root IS the piece hash
+            return pieceLayers[root]?.getOrNull(index)
+        }
+
+        // multi-file: locate the owning file and the file-relative piece index.
+        val fileIndex = storage.fileForPiece(index)
+        if (fileIndex < 0) return null
+        val file = files[fileIndex]
+        if (file.isPadFile) return null
+        val root = file.piecesRoot ?: return null
+
+        val firstPiece = storage.firstPieceOf(fileIndex)
+        val pieceInFile = index - firstPiece
+        if (pieceInFile < 0) return null
+
+        // a file that fits in a single piece has no piece-layer row: its own root IS the hash.
+        if (storage.fileNumPieces(fileIndex) <= 1) {
+            return if (pieceInFile == 0) root else null
+        }
+        return pieceLayers[root]?.getOrNull(pieceInFile)
+    }
+
+    /**
+     * For a v2 / hybrid torrent, checks the BEP-52 layout invariant that every file (except
+     * the last) begins on a piece boundary — pad files in a hybrid v1 list, and the v2 file
+     * tree's natural per-file trees, are supposed to enforce this. Returns true for v1-only
+     * torrents (the invariant does not apply) and for an empty/degenerate layout.
+     *
+     * This is a non-throwing guard: callers can decide whether to refuse a malformed torrent;
+     * parsing itself never crashes on a misaligned file. Mirrors the alignment checks
+     * libtorrent performs while reconstructing a v2 `file_storage`.
+     */
+    fun isV2LayoutValid(): Boolean {
+        if (!isV2) return true
+        if (pieceLength <= 0) return false
+        var prevOffset = -1L
+        for (i in files.indices) {
+            val f = files[i]
+            // ordering: offsets must be non-decreasing (and contiguous, since offset is
+            // the running sum of sizes — a regression means the file list is inconsistent).
+            if (f.offset < prevOffset) return false
+            prevOffset = f.offset
+            // every file except the last must start on a piece boundary.
+            val isLast = i == files.size - 1
+            if (!isLast && f.size > 0L && f.offset % pieceLength != 0L) return false
+        }
+        return true
+    }
+
+    /**
+     * The 20-byte info-hash used on the wire (the BitTorrent handshake / peer routing): the
+     * v1 hash when present, otherwise the v2 SHA-256 truncated to 20 bytes, exactly as
+     * libtorrent forms the handshake hash for a v2-only torrent.
+     */
+    fun wireInfoHash(): Sha1Hash =
+        infoHashV1 ?: Digest32.sha1(infoHashV2!!.toByteArray().copyOf(Digest32.SHA1_SIZE))
+
+    /**
      * The canonical info-hash hex for display/lookups: the v2 hash when present
      * (it's the stronger identity), otherwise the v1 hash.
      */
     fun infoHashHex(): String = (infoHashV2 ?: infoHashV1)?.toHex() ?: ""
 
-    /** A flat list of every tracker URL across all tiers. */
+    /**
+     * The announce tiers (BEP-12), preserved — each inner list is one tier, tried in order.
+     * This is the same backing data as [trackers]; exposed under the libtorrent-aligned name
+     * to make the tier structure explicit and to discourage flattening at parse time.
+     */
+    val announceTiers: List<List<String>> get() = trackers
+
+    /** A flat list of every tracker URL across all tiers (back-compat convenience). */
     fun allTrackers(): List<String> = trackers.flatten()
 
     override fun toString(): String =
@@ -125,7 +215,33 @@ class TorrentInfo private constructor(
                 createdBy = root.dictFindString("created by").takeIf { it.isValid }?.stringValue(),
                 creationDate = root.dictFindInt("creation date").takeIf { it.isValid }?.intValue(),
                 infoBytes = infoBytes,
+                pieceLayers = parsePieceLayers(root),
             )
+        }
+
+        /**
+         * Parse the BEP-52 top-level `piece layers` dict — `{ file-root(32B) →
+         * concatenated 32-byte piece hashes }`. Absent for v1 torrents and for v2 files
+         * that fit in a single piece.
+         */
+        private fun parsePieceLayers(root: BdecodeNode): Map<Sha256Hash, List<Sha256Hash>> {
+            val node = root.dictFindDict("piece layers")
+            if (!node.isValid) return emptyMap()
+            val out = LinkedHashMap<Sha256Hash, List<Sha256Hash>>()
+            for (i in 0 until node.dictSize()) {
+                val (keyBytes, value) = node.dictAt(i)
+                if (keyBytes.size != Digest32.SHA256_SIZE || value.type != BdecodeNode.Type.STRING) continue
+                val blob = value.stringBytes()
+                if (blob.isEmpty() || blob.size % Digest32.SHA256_SIZE != 0) continue
+                val hashes = ArrayList<Sha256Hash>(blob.size / Digest32.SHA256_SIZE)
+                var off = 0
+                while (off + Digest32.SHA256_SIZE <= blob.size) {
+                    hashes.add(Digest32.sha256(blob.copyOfRange(off, off + Digest32.SHA256_SIZE)))
+                    off += Digest32.SHA256_SIZE
+                }
+                out[Digest32.sha256(keyBytes)] = hashes
+            }
+            return out
         }
 
         private fun parseFiles(info: BdecodeNode, name: String): List<FileEntry> {
@@ -164,6 +280,8 @@ class TorrentInfo private constructor(
                             piecesRoot = v2Roots[rel],
                             isPadFile = attr.contains('p'),
                             symlinkTarget = parseSymlink(f),
+                            isExecutable = attr.contains('x'),
+                            isHidden = attr.contains('h'),
                         ),
                     )
                     offset += size
@@ -187,6 +305,9 @@ class TorrentInfo private constructor(
                             offset = offset,
                             piecesRoot = lf.piecesRoot,
                             symlinkTarget = lf.symlink,
+                            isPadFile = lf.attr.contains('p'),
+                            isExecutable = lf.attr.contains('x'),
+                            isHidden = lf.attr.contains('h'),
                         ),
                     )
                     offset += lf.size
@@ -204,6 +325,7 @@ class TorrentInfo private constructor(
             val size: Long,
             val piecesRoot: Sha256Hash?,
             val symlink: String?,
+            val attr: String = "",
         )
 
         // BEP 52 file tree: nested dicts keyed by path component; a file terminates in a
@@ -219,7 +341,7 @@ class TorrentInfo private constructor(
                     val rootBytes = child.dictFindStringBytes("pieces root")
                     val piecesRoot =
                         if (rootBytes != null && rootBytes.size == 32) Digest32.sha256(rootBytes) else null
-                    out.add(V2Leaf(prefix, size, piecesRoot, parseSymlink(child)))
+                    out.add(V2Leaf(prefix, size, piecesRoot, parseSymlink(child), child.dictFindStringValue("attr")))
                 } else if (child.type == BdecodeNode.Type.DICT) {
                     val childPrefix = if (prefix.isEmpty()) key else "$prefix/$key"
                     out.addAll(collectFileTreeLeaves(child, childPrefix))

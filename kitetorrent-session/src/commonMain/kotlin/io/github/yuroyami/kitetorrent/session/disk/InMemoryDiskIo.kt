@@ -57,6 +57,32 @@ class InMemoryDiskIo(private val storage: FileStorage) : DiskIo {
 
     override suspend fun close() {}
 
+    /**
+     * The torrent lives in one anonymous buffer addressed by absolute offset, so there
+     * are no on-disk paths to relocate; [savePath] is tracked only so callers can read
+     * back the current location, mirroring libtorrent's bookkeeping.
+     */
+    override suspend fun move(newSavePath: String) {
+        savePath = newSavePath
+    }
+
+    /**
+     * File names are not part of the in-memory model (the buffer is addressed by offset),
+     * so a rename only updates the recorded name map for inspection by tests.
+     */
+    override suspend fun rename(fileIndex: Int, newName: String) {
+        if (fileIndex in storage.files.indices) renamed[fileIndex] = newName
+    }
+
+    /** The current save path (defaults to empty until [move] is called). */
+    var savePath: String = ""
+        private set
+
+    private val renamed = HashMap<Int, String>()
+
+    /** The effective name of [fileIndex] after any [rename] (its original path otherwise). */
+    fun fileName(fileIndex: Int): String = renamed[fileIndex] ?: storage.files[fileIndex].path
+
     /** Direct access to the backing bytes — for tests asserting written content. */
     fun snapshot(): ByteArray = data.copyOf()
 
