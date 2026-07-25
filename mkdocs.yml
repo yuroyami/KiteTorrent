@@ -1,9 +1,9 @@
 site_name: KiteTorrent
 site_url: https://yuroyami.github.io/KiteTorrent/
 site_description: >-
-  A pure-Kotlin BitTorrent engine: a from-scratch Kotlin Multiplatform port of
-  libtorrent (Rasterbar). No JNI, no cinterop. Download, seed and start from
-  magnets on Android, iOS, JVM and the browser.
+  A BitTorrent engine written entirely in Kotlin. Download and seed torrents,
+  and start from magnet links, on Android, iOS, JVM and the browser. No JNI
+  and no cinterop.
 site_author: yuroyami
 copyright: Copyright &copy; 2026 yuroyami, BSD-3-Clause
 
