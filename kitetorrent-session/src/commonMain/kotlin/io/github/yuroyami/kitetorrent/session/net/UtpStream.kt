@@ -1100,11 +1100,17 @@ fun seqLessWrap(lhs: Int, rhs: Int, mask: Int = UtpStream.ACK_MASK): Boolean {
 }
 
 /**
- * The default injected microsecond clock for [UtpStream]: a plain monotonically
- * increasing counter, so the core stays clockless and deterministic. Each call
- * returns the previous value plus one. This is not a real wall or monotonic clock.
- * Peers that compute one-way delay from our timestamps will see meaningless deltas,
- * which is fine because this core does not run delay-based congestion control anyway.
+ * A deterministic microsecond source for tests. Each call returns the previous value
+ * plus one. It is not a wall clock and it is not a monotonic clock.
+ *
+ * Do not use this in production. [UtpStream] stamps every outgoing packet with this
+ * value. The peer subtracts that stamp from its own clock and echoes the difference
+ * back. [UtpStream] feeds the echoed difference into its queuing-delay estimate.
+ * LEDBAT then scales the congestion window by the distance between that estimate and
+ * [UtpStream.TARGET_DELAY_MICROS]. A counter makes the estimate meaningless, so the
+ * window stops tracking real congestion.
+ *
+ * Production streams must inject [MonotonicMicros].
  */
 class MicrosCounter(start: Long = 0L) : () -> Long {
     private var n = start
@@ -1112,10 +1118,13 @@ class MicrosCounter(start: Long = 0L) : () -> Long {
 }
 
 /**
- * A real monotonic microsecond clock for production [UtpStream]s, so RTT samples and
- * the RTO timer measure wall-clock elapsed time (and the timestamps peers read for
- * one-way-delay are meaningful). Built on [kotlin.time.TimeSource.Monotonic], which is
- * available on every KMP target.
+ * A real monotonic microsecond clock. Use this for every production [UtpStream].
+ *
+ * RTT samples and the RTO timer then measure elapsed time rather than a call count.
+ * The timestamps peers read for one-way delay also become meaningful, which is what
+ * LEDBAT needs to size the congestion window. Built on
+ * [kotlin.time.TimeSource.Monotonic], which every Kotlin Multiplatform target
+ * provides.
  */
 class MonotonicMicros : () -> Long {
     private val start = kotlin.time.TimeSource.Monotonic.markNow()
