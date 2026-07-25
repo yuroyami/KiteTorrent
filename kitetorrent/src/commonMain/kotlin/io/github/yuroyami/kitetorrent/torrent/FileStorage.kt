@@ -112,10 +112,10 @@ class FileStorage internal constructor(
     }
 
     /**
-     * The inclusive..exclusive piece range covering file [fileIndex], as an [IntRange] over
-     * `[firstPiece, lastPiece]` (last piece is the one containing the file's final byte).
-     * This is analogous to `file_storage::file_piece_range`. The range is empty (e.g.
-     * `0 until 0` → `IntRange.EMPTY`) for a zero-length file.
+     * The piece range covering file [fileIndex], inclusive at both ends. The range runs
+     * from the piece holding the file's first byte to the piece holding its last byte.
+     * This is analogous to `file_storage::file_piece_range`. A zero-length file returns
+     * [IntRange.EMPTY].
      */
     fun pieceRangeForFile(fileIndex: Int): IntRange {
         require(fileIndex in files.indices) { "file index $fileIndex out of range [0,${files.size})" }
