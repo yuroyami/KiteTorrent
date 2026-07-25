@@ -1,10 +1,10 @@
 # KiteTorrent — Porting Status
 
-Porting **libtorrent RC_2_0 (2.0.12)** — ~95k lines of C++ source + ~56k of headers — to pure Kotlin Multiplatform. This is the honest map: what's done, what's next, where the architecture diverges.
+Porting **libtorrent RC_2_0 (2.0.12)** — ~95k lines of C++ source + ~56k of headers — to pure Kotlin Multiplatform. Component-by-component: what's done, what's next, where the architecture diverges.
 
-## The fundamental shape of the work
+## The shape of the work
 
-libtorrent is **not** like MuPDF/KitePDF. PDF rendering is pure computation, so KitePDF could be 100% stdlib-only `commonMain`. BitTorrent's whole reason to exist is **networking + concurrency + disk I/O**, which have no stdlib-only equivalent. So KiteTorrent splits along that fault line:
+BitTorrent is networking, concurrency and disk I/O, and none of those have a stdlib-only equivalent in Kotlin. So KiteTorrent splits along that fault line:
 
 | Tier | Nature | Module | Stack |
 |------|--------|--------|-------|
@@ -18,7 +18,7 @@ Legend: ✅ done & tested · 🟡 partial/under test · 🔜 in progress · ⬜ 
 
 ---
 
-## Tier 1 — Pure core (`:kitetorrent`) — **✅ essentially complete · 460 tests passing**
+## Tier 1 — Pure core (`:kitetorrent`) — **✅ essentially complete · 462 tests passing**
 
 | Area | KiteTorrent | libtorrent source | Validation |
 |---|---|---|---|
@@ -39,16 +39,17 @@ Legend: ✅ done & tested · 🟡 partial/under test · 🔜 in progress · ⬜ 
 | DHT (data) | `dht/NodeId·NodeEntry·RoutingTable·DhtMessage·DhtStorage·DhtItem·CompactNodes` | `kademlia/*` (pure half) | ✅ BEP-42/44/51 |
 | Extensions | `extensions/UtMetadata·UtPex` | `ut_metadata/ut_pex.cpp` | ✅ codecs |
 | Compression | `compression/Inflate·Gzip` | `puff/gzip.cpp` | ✅ vs zlib |
-| Settings/errors/alerts | `settings/` (consumed live by the engine — see Wave 6), `error/LibtorrentError` (219), `alert/` (~30) | `settings_pack/error_code/alert.cpp` | 🟡 common subset |
+| Settings/errors/alerts | `settings/` (consumed live by the engine — see Wave 6), `error/LibtorrentError` (219), `alert/` (51 concrete classes) | `settings_pack/error_code/alert.cpp` | 🟡 common subset |
+| Hash picker (v2) | `torrent/HashPicker` | `hash_picker.cpp` | ✅ builds/validates `hash_request` + `hashes` |
 | Utils | `util/Base32·UrlEscape·StringUtil·BloomFilter`, `bandwidth/`, `stat/` | various | ✅ |
 
-Remaining Tier-1 odds & ends (low priority): full alert catalogue (~100 types; ~30 done), `peer_class`, port-mapping message codecs, a few string/url helpers.
+Remaining Tier-1 odds & ends (low priority): full alert catalogue (~100 types; 51 done), `peer_class`, port-mapping message codecs, a few string/url helpers.
 
 ---
 
-## Tier 2 — Live session (`:kitetorrent-session`) — **✅ downloads, seeds, and magnets, end-to-end**
+## Tier 2 — Live session (`:kitetorrent-session`) — **✅ downloads, seeds, and magnets, end-to-end · 105 tests, 104 passing**
 
-On coroutines 1.10.2 / ktor 3.2.3 / kotlinx-io 0.7.0 (Android · iOS · JVM). Validated by real loopback integration tests, not just unit tests.
+On coroutines 1.11.0 / ktor 3.5.1 / kotlinx-io 0.9.1 (Android · iOS · JVM). Validated by real loopback integration tests, not just unit tests.
 
 | Component | KiteTorrent | libtorrent source | Status |
 |---|---|---|---|
@@ -60,11 +61,16 @@ On coroutines 1.10.2 / ktor 3.2.3 / kotlinx-io 0.7.0 (Android · iOS · JVM). Va
 | Download/upload engine | `engine/TorrentSession` (rarest-first dl + serve/seed, the full `request_blocks` scheduler — see Wave 6) | `torrent.cpp`, `request_blocks.cpp` | ✅ |
 | Session manager | `engine/KiteTorrentEngine` (multi-torrent, listen, DHT, magnet, rate limits, connection cap, `SettingsPack`-driven) | `session_impl.cpp` | ✅ |
 | Magnet metadata | `peer/MetadataExchange` + `extensions/ExtensionHandshake` (BEP-9/10) | `ut_metadata.cpp` | ✅ |
-| uTP transport | `net/UtpStream·UtpPacket·UtpSocketManager` (active+passive open, connection-id demux, **wired as an engine transport** with TCP fallback) | `utp_stream.cpp`, `utp_socket_manager.cpp` | ✅ |
+| uTP transport | `net/UtpStream·UtpPacket·UtpSocketManager` (active+passive open, connection-id demux, LEDBAT, RTO, SACK, fast resend, Nagle; **wired as an engine transport** with TCP fallback) | `utp_stream.cpp`, `utp_socket_manager.cpp` | ✅ |
 | Web seeds | `peer/WebSeed` (BEP-19) | `web_peer_connection.cpp` | ✅ |
 | UPnP / NAT-PMP | `net/Upnp`, `net/NatPmp` | `upnp.cpp`, `natpmp.cpp` | ✅ |
+| MSE encryption | `peer/Mse` (`initiate`/`accept`, plaintext sniff on inbound), gated by `out_enc_policy`/`in_enc_policy` | `pe_crypto.cpp`, `bt_peer_connection.cpp` | ✅ both directions |
+| Proxies | `net/Socks5` (SOCKS5 incl. UDP ASSOCIATE, SOCKS4/4a, HTTP CONNECT) + `KiteTorrentEngine.applyProxyFromSettings()` | `proxy_settings`, `socks5_stream.cpp` | ✅ |
+| BitTorrent v2 hash exchange | `hash_request`/`hashes`/`hash_reject` (ids 21/22/23) codec + `HashPicker` driven from `TorrentSession` (serves and consumes) | `bt_peer_connection.cpp`, `hash_picker.cpp` | ✅ |
 
-Integration tests (loopback, real sockets): TCP download from a seeder · **two engines exchanging a torrent** · **two engines exchanging a torrent over µTP** · **magnet metadata fetch** · **full magnet download between two engines** · real-file `FileDiskIo` · a scripted withholding peer proving **end-game duplication + cancel** and **snubbing** · a **rate-limited** download · the **connection cap**.
+Integration tests (loopback, real sockets): TCP download from a seeder · **two engines exchanging a torrent**, in plaintext and with MSE forced · **two engines exchanging a torrent over µTP** · **magnet metadata fetch** · **full magnet download between two engines** · a **v2-only** torrent · a scripted withholding peer proving **end-game duplication + cancel** and **snubbing** · a **rate-limited** download · the **connection cap** · SOCKS4, SOCKS5, SOCKS5-UDP and HTTP-CONNECT proxies.
+
+Two caveats on that list. `FileDiskIoTest` contains a single test, and every engine-level integration test uses `InMemoryDiskIo` — which is how the `checkExistingFiles` defect below shipped. And `.github/workflows/` contains only `docs.yml`, so none of these run on push; the counts above come from local runs.
 
 ### Wave 5 — download robustness ✅
 
@@ -91,7 +97,32 @@ Everything "still partial after Wave 5" is now ported for real, plus the two tra
 | **Sequential download** | `session.sequentialDownload = true` → in-order pieces (verified in-order completion in tests) | `torrent_flags::sequential_download` |
 | **settings_pack — consumed** | the engine reads its knobs (`piece_timeout`, `request_timeout`, `request_queue_time`, `max_out_request_queue`, `initial_picker_threshold`, `strict_end_game_mode`, `unchoke_interval`, `unchoke_slots_limit`, `connections_limit`, rate limits) from the ported `SettingsPack`, with libtorrent's defaults | `settings_pack.cpp` |
 
-Known simplification kept from the standalone µTP work: `UtpStream` still uses a fixed send window (no LEDBAT congestion control or retransmission timer yet).
+### Wave 7 — µTP congestion control, encryption, proxies, v2 ✅
+
+| Feature | KiteTorrent | libtorrent source |
+|---|---|---|
+| **LEDBAT** | `UtpStream.growCwndLocked` (UtpStream.kt:848-876) runs real `do_ledbat`: a 100 ms target queuing delay, a `cwnd_saturated` gate so an idle writer cannot inflate the window for free, a delay-driven slow-start exit that halves `ssthresh`, and an off-target gain bounded to ~1 MSS/RTT. Base delay is a time-bucketed rolling minimum fed from inbound `timestamp_difference`. | `utp_stream.cpp` `do_ledbat` |
+| **Retransmission** | RTO with Jacobson/Karels RTT, Karn's algorithm, exponential backoff to 60 s, go-back-N resend of every un-SACKed packet, socket failure after 6 timeouts | `utp_stream.cpp` timeout path |
+| **SACK + fast resend** | selective-ack extension emitted and consumed (256-bit window), duplicate-ACK / SACK-above threshold of 3 triggers a fast resend with `cwnd = ssthresh = max(cwnd/2, 2·mss)` | `utp_stream.cpp` |
+| **Nagle** | sub-MSS writes are held and coalesced into the next frame, drained on tick and on the ack path, with a force-flush path | `utp_stream.cpp` |
+| **MSE / PE** | `Mse.initiate` and `Mse.accept` over the ported RC4 / Diffie-Hellman / BigInt; inbound connections are sniffed for a plaintext BitTorrent handshake and routed accordingly; `out_enc_policy` / `in_enc_policy` select forced, enabled or disabled | `pe_crypto.cpp` |
+| **Proxies** | SOCKS5 (with UDP ASSOCIATE, so the shared UDP socket carrying the DHT and µTP is relayed too), SOCKS4/4a, HTTP CONNECT; configured from the `proxy_*` settings at `start()` or imperatively for TCP dials | `socks5_stream.cpp`, `session_impl::update_proxy` |
+| **v2 hash requests** | `hash_request` / `hashes` / `hash_reject` encode and decode; `HashPicker` builds requests and validates the merkle proofs; `TorrentSession` both answers incoming requests from its own trees and folds received leaves into the per-file `MerkleTree`s | `hash_picker.cpp` |
+
+Remaining µTP simplification: there is no path-MTU probing. The MSS starts at 1400 and only shrinks — 64 bytes after two consecutive timeout rounds, floor 1212 — and never grows back.
+
+## Known defects
+
+These ship today and fail silently. They are the first things to fix.
+
+| Defect | Where | Effect |
+|---|---|---|
+| `FileDiskIo.checkExistingFiles()` always returns all-`false` | `FileDiskIo.kt:216` | `recheck()` defaults to `full = false` and consults that array, and `addTorrent` → `start()` → `recheck()` gives no interception point. A `FileDiskIo` pointed at a complete copy reports zero pieces and re-downloads everything over it. Workaround: `session.recheck(full = true)`. Masked in testing because every engine integration test uses `InMemoryDiskIo`, whose implementation is real. |
+| `httpTracker` defaults to `null` | `KiteTorrentEngine.kt:86` | Both announce paths are `httpTracker?.announce(...)` (`TorrentSession.kt:679`, `KiteTorrentEngine.kt:655`). No exception, no alert, no log — HTTP and HTTPS announces are skipped, and a torrent whose trackers are all HTTP finds no peers. |
+| `progress()` divides by every piece | `TorrentSession.kt:311` | Filtered (priority 0) pieces stay in the denominator, so `progress()` cannot reach `1.0` and `isSeeding()` cannot become true for a torrent with an ignored file. `PiecePicker.isFinished()` is the correct predicate and is never called. |
+| `FileDiskIo` dispatcher defaults to `Dispatchers.Default` | `FileDiskIo.kt:49` | Blocking file syscalls land on the CPU dispatcher unless the caller passes `Dispatchers.IO`. |
+| `anonymous_mode` does not force a proxy | `KiteTorrentEngine.kt:164` KDoc vs. lines 171/196/435 | It skips the listen socket, skips UPnP/NAT-PMP and randomises the per-torrent peer id. Nothing refuses to dial without a proxy, so an unconfigured engine leaks direct. |
+| `allowed_enc_level` and `prefer_rc4` are inert | `IntSettings.kt:328`, `BoolSettings.kt:139` | Declared in the settings model, never read by the session module. |
 
 ## Tier 3 — Platform `expect`/`actual` — ✅ (core paths)
 
@@ -105,3 +136,5 @@ Known simplification kept from the standalone µTP work: `UtpStream` still uses 
 ## Testing philosophy
 
 Every pure module is validated against ground truth, not just "compiles": FIPS vectors (hashing), RFC 8032 (ed25519), real torrents from libtorrent's own `test/` tree (info-hashes cross-checked against an independent SHA-1), and BEP golden bytes (DHT, ut_pex, UDP tracker). Networking code keeps its parse/build logic in pure, testable functions; live-socket behaviour is validated at the engine integration level.
+
+567 tests run on the JVM path: 462 in the core's common suite, 105 in the session module (60 common, 45 JVM-only). 566 pass. `Socks5UdpTest.proxiedUdpSocketWrapsAndUnwrapsThroughRelay` times out after 15 s waiting on `UdpSocket.receive` against its own loopback relay, reproducibly. Two weak spots besides: the real-file disk layer has one test, and no workflow runs any of this.

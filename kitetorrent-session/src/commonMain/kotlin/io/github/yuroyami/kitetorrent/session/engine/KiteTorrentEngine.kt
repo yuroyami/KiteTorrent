@@ -449,7 +449,7 @@ class KiteTorrentEngine(
             resumeData = resume,
             ipFilter = ipFilter,
         )
-        // funnel per-torrent events into the session-wide alert queue (Tier D added the hook).
+        // funnel per-torrent events into the session-wide alert queue.
         session.onAlert = { a -> postAlert(a) }
         // feed a BEP-5 `port` peer's advertised UDP node to the DHT, if any.
         session.onDhtPort = { host, port -> scope.launch { runCatching { feedDhtNode(host, port) } } }

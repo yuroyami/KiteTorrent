@@ -96,7 +96,7 @@ All setters are fluent and return the `CreateTorrent`, so you can chain them.
 
 ## v1, v2 and hybrid
 
-This is the part most home-grown torrent code gets wrong. The flavour of the torrent you produce is decided by which hashes you set and the flags you pass:
+The flavour of the torrent you produce is decided by which hashes you set and the flags you pass:
 
 === "v1 only"
 
@@ -144,33 +144,51 @@ After parsing, `TorrentInfo` tells you what you got: `isV1`, `isV2`, `isHybrid`,
 
 ## Serving a torrent
 
-Once a torrent's data is on disk, the engine seeds it like any other torrent. There is no separate "seed" call: you add the torrent, the session rechecks the files, finds it already has every piece, and moves to the `SEEDING` state.
+Once a torrent's data is on disk, the engine seeds it like any other torrent. There is no separate "seed" call: you add the torrent, get the session to verify what is already there, and it moves to the `SEEDING` state once it holds every piece.
 
 ```kotlin
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
 import io.github.yuroyami.kitetorrent.session.disk.FileDiskIo
 import io.github.yuroyami.kitetorrent.session.engine.TorrentState
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
 import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import kotlinx.coroutines.Dispatchers
 
-val engine = KiteTorrentEngine(scope, enableDht = true)
+val engine = KiteTorrentEngine(
+    scope,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    enableDht = true,
+)
 engine.start()
 
 val torrent = TorrentInfo.parse(torrentBytes)
 val session = engine.addTorrent(
     torrent,
-    FileDiskIo(torrent.storage, basePath = "/srv/downloads", dispatcher = ioDispatcher),
+    FileDiskIo(torrent.storage, basePath = "/srv/downloads", dispatcher = Dispatchers.IO),
     resume = null,
 )
 
 session.onStateChanged = { state ->
     if (state == TorrentState.SEEDING) println("Now seeding ${torrent.name}")
 }
+
+// Required with FileDiskIo: rehash every piece so the session claims the data on disk.
+session.recheck(full = true)
 ```
 
-On `addTorrent` with `resume = null`, the session runs a verified recheck: it hashes the on-disk pieces and claims only the ones whose hash matches the torrent. For a complete copy, every piece verifies and the session goes straight to `SEEDING`. To skip the rehash on a known-good copy, pass saved [resume data](downloading.md) instead of `null`.
+!!! warning "`FileDiskIo` reports no pieces present"
+    Adding a torrent whose files are already complete does **not** put the session into `SEEDING` on its own. `addTorrent` calls `session.start()` internally, and with `resume = null` that runs `recheck()` with its default `full = false`. That default only hashes the pieces the disk layer flags as present, and `FileDiskIo.checkExistingFiles()` returns an all-false array. Zero pieces get claimed, the session stays in `DOWNLOADING`, and it re-downloads the whole torrent over the files that were already there. There is no exception, no alert and no log entry, and `addTorrent` gives you no hook to intervene before `start()` runs.
 
-!!! tip "Recheck is honest"
-    The recheck hashes the bytes; it does not trust the file sizes or the disk layer. If a file was truncated or corrupted, those pieces fail verification and the session re-downloads them instead of serving bad data. That is the same `storage_utils.cpp` recheck behaviour as libtorrent.
+    ```kotlin
+    val session = engine.addTorrent(torrent, disk)
+    session.recheck(full = true)   // FileDiskIo reports nothing present without this
+    ```
+
+    With `full = true` the recheck hashes the bytes of every piece and claims only the ones whose hash matches the torrent, so a truncated or corrupted file is caught and those pieces are re-downloaded rather than served. `InMemoryDiskIo` does return a real present-map, so the default `full = false` behaves as described there.
+
+To skip the rehash on a known-good copy, pass saved [resume data](downloading.md) instead of `null`. That path claims pieces from the stored bitfield without touching the disk.
 
 ### The upload path
 
@@ -202,11 +220,18 @@ All of this is driven by `SettingsPack`. To change the cadence or slot count glo
 ```kotlin
 import io.github.yuroyami.kitetorrent.settings.SettingsPack
 import io.github.yuroyami.kitetorrent.settings.IntSetting
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
 
 val settings = SettingsPack()
 settings.setInt(IntSetting.UNCHOKE_SLOTS_LIMIT, 8)
 settings.setInt(IntSetting.UNCHOKE_INTERVAL, 10)   // seconds between rounds
-val engine = KiteTorrentEngine(scope, settings = settings)
+val engine = KiteTorrentEngine(
+    scope,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    settings = settings,
+)
 ```
 
 ### Watching upload progress
@@ -219,13 +244,13 @@ println("peers: ${session.numPeers()}")
 println("complete: ${session.progress() * 100}%")
 ```
 
-For per-event detail (a peer connecting, a piece served), drain the engine's alert queue. Alerts like `PeerConnectAlert` and `PeerDisconnectAlert` report connection churn:
+For per-event detail (a peer connecting, a piece served), drain the engine's alert queue. Alerts like `PeerConnectAlert` and `PeerDisconnectedAlert` report connection churn:
 
 ```kotlin
 for (alert in engine.popAlerts()) {
     when (alert) {
         is PeerConnectAlert -> println("peer connected")
-        is PeerDisconnectAlert -> println("peer left")
+        is PeerDisconnectedAlert -> println("peer left")
     }
 }
 ```
@@ -259,6 +284,10 @@ import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
 import io.github.yuroyami.kitetorrent.crypto.Hasher
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
 import io.github.yuroyami.kitetorrent.session.disk.FileDiskIo
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import kotlinx.coroutines.Dispatchers
 
 suspend fun seed(scope: CoroutineScope, fileBytes: ByteArray, savePath: String) {
     val pieceLength = 256 * 1024
@@ -279,16 +308,23 @@ suspend fun seed(scope: CoroutineScope, fileBytes: ByteArray, savePath: String) 
     val torrentBytes = creator.generateBuffer()   // distribute this .torrent
 
     // 2. seed the data the torrent describes
-    val engine = KiteTorrentEngine(scope, enableDht = true)
+    val engine = KiteTorrentEngine(
+        scope,
+        httpTracker = HttpTracker(HttpClient(CIO)),
+        enableDht = true,
+    )
     engine.start()
 
     val torrent = TorrentInfo.parse(torrentBytes)
     val session = engine.addTorrent(
         torrent,
-        FileDiskIo(torrent.storage, basePath = savePath, dispatcher = ioDispatcher),
+        FileDiskIo(torrent.storage, basePath = savePath, dispatcher = Dispatchers.IO),
         resume = null,
     )
     session.uploadSlots = 8
+
+    // 3. claim the data already on disk; without this the session re-downloads it.
+    session.recheck(full = true)
 }
 ```
 

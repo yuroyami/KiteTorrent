@@ -19,9 +19,9 @@ The core depends on `kotlin-stdlib` and nothing else. The session adds `kotlinx.
 
 ## Why the boundary exists
 
-libtorrent is not like a PDF engine. A PDF library is pure computation, so it can be 100% stdlib-only common Kotlin. BitTorrent's whole reason to exist is networking, concurrency, and disk I/O, and the Kotlin standard library has no equivalent for any of those. There is no stdlib-only way to open a socket.
+BitTorrent is a networking protocol. Running a session means opening TCP and UDP sockets, driving timers, and reading and writing files concurrently, and the Kotlin standard library has no API for any of those. There is no stdlib-only way to open a socket.
 
-So KiteTorrent does not pretend otherwise. The two artifacts draw the line honestly:
+The two artifacts draw the line there:
 
 `kitetorrent` (the core)
 : Bencoding, hashing, `.torrent` and magnet parsing, the wire-protocol codec, the piece picker, DHT data structures, settings, alerts, and crypto. All pure computation. No sockets, no files, no coroutines. This is why it can target JS: the browser has no raw TCP or UDP, but it does not need any.
@@ -58,9 +58,17 @@ Add this when you actually want to download or seed. It depends on the core (tra
 ```kotlin
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
 import io.github.yuroyami.kitetorrent.session.disk.FileDiskIo
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
 import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import kotlinx.coroutines.Dispatchers
 
-val engine = KiteTorrentEngine(scope, enableDht = true)
+val engine = KiteTorrentEngine(
+    scope,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    enableDht = true,
+)
 engine.start()
 
 val torrent = TorrentInfo.parse(bytes)
@@ -69,10 +77,14 @@ val session = engine.addTorrent(
     FileDiskIo(torrent.storage, "/downloads", dispatcher = Dispatchers.IO, filePriorities = null),
     resume = null,
 )
-session.onPieceVerified = { piece -> println("piece $piece: ${session.progress() * 100}%") }
+
+// onPieceVerified is a plain callback, so it cannot call the suspending progress().
+session.onPieceVerified = { piece -> println("piece $piece verified") }
 ```
 
 The session module covers the engine, the per-torrent session, peer connections, HTTP and UDP trackers, a live DHT node, µTP (BEP-29), UPnP, and NAT-PMP. It targets Android, iOS, and the JVM.
+
+`httpTracker` defaults to `null`, and with no `HttpTracker` the engine skips every `http://` and `https://` announce silently. The ktor client it wraps is yours to supply, because `ktor-client-core` is an `implementation` dependency of the session module rather than an `api` one. See [Getting started](getting-started.md) for the dependency set.
 
 ## Disk I/O
 

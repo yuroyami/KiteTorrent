@@ -1,20 +1,42 @@
 # KiteTorrent
 
-**One pure-Kotlin BitTorrent engine for Kotlin Multiplatform.** A from-scratch port of [libtorrent](https://github.com/arvidn/libtorrent) (Rasterbar) to Kotlin: no JNI, no cinterop, no platform renderers. The same `.kt` runs on Android, iOS, desktop JVM and the browser.
+A BitTorrent engine written entirely in Kotlin: a from-scratch port of [libtorrent](https://github.com/arvidn/libtorrent) (Rasterbar), with no JNI, no cinterop and no bundled native binary. The same `.kt` runs on Android, iOS, desktop JVM and — for the parts that do not need a socket — the browser.
 
 ```kotlin
-// Spin up an engine, add a .torrent or a magnet, and download.
-val engine = KiteTorrentEngine(scope, enableDht = true)
+import io.github.yuroyami.kitetorrent.session.disk.FileDiskIo
+import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
+import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import kotlinx.coroutines.Dispatchers
+
+val engine = KiteTorrentEngine(
+    scope,
+    // Leave this null and every http:// and https:// announce is skipped, silently.
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    enableDht = true,
+)
 engine.start()
 
 val torrent = TorrentInfo.parse(bytes)
-val session = engine.addTorrent(torrent, FileDiskIo(torrent.storage, "/downloads"), resume = null)
-session.onPieceVerified = { piece -> println("piece $piece, ${session.progress() * 100}%") }
+val session = engine.addTorrent(
+    torrent,
+    FileDiskIo(torrent.storage, "/downloads", Dispatchers.IO),
+)
 
-// ...or start from a magnet link
-val magnet = MagnetUri.parseMagnetUri("magnet:?xt=urn:btih:0496aa38...")
-engine.addMagnet(magnet, diskFactory = { t -> FileDiskIo(t.storage, "/downloads") })
+// onPieceVerified is a plain callback, so it cannot call the suspending progress().
+session.onPieceVerified = { piece -> println("piece $piece verified") }
+scope.launch {
+    while (!session.isSeeding()) {
+        println("${(session.progress() * 100).toInt()}%")
+        delay(1_000)
+    }
+}
 ```
+
+!!! warning "Two defaults fail silently"
+    `httpTracker` defaults to `null`, and every HTTP or HTTPS announce is a null-safe call — so with the default there is no exception, no alert and no log, and a torrent whose trackers are all HTTP finds no peers. And `FileDiskIo` reports nothing already on disk, so it cannot resume or seed an existing copy without an explicit `session.recheck(full = true)`. Both are covered in [Getting started](getting-started.md) and [Seeding](seeding.md).
 
 <div class="grid cards" markdown>
 
@@ -23,15 +45,9 @@ engine.addMagnet(magnet, diskFactory = { t -> FileDiskIo(t.storage, "/downloads"
 
 </div>
 
-## Why KiteTorrent
+## The module split
 
-Every Kotlin Multiplatform app that touches torrents today shells out to a C++ blob: JNI on Android, a hand-rolled bridge on iOS, something else again on the web. You inherit a native dependency per platform, a build step per platform, and a set of bugs per platform that never line up.
-
-KiteTorrent closes that gap. It reimplements a heavyweight C++ library as **pure, portable Kotlin**. One codebase, one mental model, every target. When something is wrong, it is one bug in one place.
-
-## The honest module split
-
-BitTorrent is not pure computation the way PDF rendering is. Its whole reason to exist is networking, concurrency and disk I/O, none of which have a stdlib-only equivalent. So KiteTorrent splits along that fault line, and the split is deliberate:
+BitTorrent is networking, concurrency and disk I/O, and none of those have a stdlib-only equivalent in Kotlin. So KiteTorrent splits along that line:
 
 | Module | Nature | Stack | Targets |
 |---|---|---|---|
@@ -72,14 +88,16 @@ KiteTorrent is published as **`0.0.1-SNAPSHOT`** and consumed via **`mavenLocal`
     }
     ```
 
-Make sure `mavenLocal()` is in your `repositories { }` block. The core's only dependency is `kotlin-stdlib`. The session module adds `kotlinx.coroutines`, `ktor-network` and `kotlinx-io`.
+Make sure `mavenLocal()` is in your `repositories { }` block. The core's only dependency is `kotlin-stdlib`. The session module adds `kotlinx.coroutines` 1.11.0, `ktor-network` 3.5.1, `ktor-client-core` 3.5.1 and `kotlinx-io-core` 0.9.1.
+
+`ktor-client-core` is an `implementation` dependency, so it is not on your compile classpath. To construct an `HttpTracker` you also need `io.ktor:ktor-client-core:3.5.1` plus a client engine of your own — `ktor-client-cio` on JVM and Android, `ktor-client-darwin` on iOS.
 
 !!! warning "No browser engine"
     `:kitetorrent` targets the browser (JS), but `:kitetorrent-session` does not. Browsers have no raw TCP/UDP sockets, so the live engine cannot run there. You can still parse torrents, decode magnets and hash data in the browser with the core module alone.
 
 ## What works today
 
-KiteTorrent **downloads, seeds and starts from magnet links, end-to-end.** **532 tests pass**, including loopback integration tests over real sockets: a TCP download from a seeder, two engines exchanging a torrent (and again entirely over µTP), a `ut_metadata` magnet fetch, a full magnet download between two engines, and adversarial runs against a scripted peer that withholds blocks, proving the end-game and snubbing machinery recovers.
+KiteTorrent **downloads, seeds and starts from magnet links, end-to-end.** The JVM path runs **567 tests**, of which 566 pass (`Socks5UdpTest` times out reproducibly). They include loopback integration tests over real sockets: a TCP download from a seeder, two engines exchanging a torrent (in plaintext, with MSE forced, and again entirely over µTP), a `ut_metadata` magnet fetch, a full magnet download between two engines, a v2-only torrent, the proxy suite, and adversarial runs against a scripted peer that withholds blocks, proving the end-game and snubbing machinery recovers. No workflow runs these tests; `.github/workflows/` builds the docs only.
 
 **Pure core (`:kitetorrent`):**
 
@@ -94,7 +112,10 @@ KiteTorrent **downloads, seeds and starts from magnet links, end-to-end.** **532
 - **`PeerConnection`.** The full BitTorrent handshake and message loop, inbound and outbound.
 - **`TorrentSession`.** Download and seed, driven by the ported `request_blocks` scheduler: dynamic per-peer request queues, true end-game mode, snubbing, tit-for-tat choking, verified resume, request timeouts, piece and file priorities, sequential download and pause/resume.
 - **Magnet links.** `addMagnet` fetches metadata via `ut_metadata` (BEP-9/10), then downloads.
-- **Transports.** TCP and µTP (BEP-29), with outgoing dials trying µTP and falling back to TCP.
+- **Transports.** TCP and µTP (BEP-29), with outgoing dials trying µTP and falling back to TCP. µTP runs LEDBAT congestion control against a 100 ms target delay, an RTO with exponential backoff, go-back-N resend, SACK, duplicate-ACK fast resend and Nagle coalescing.
+- **Encryption.** MSE in both directions, with plaintext sniffing on inbound connections, selected by `out_enc_policy` and `in_enc_policy`.
+- **Proxies.** SOCKS5 (including UDP ASSOCIATE, so the DHT and µTP are relayed too), SOCKS4/4a and HTTP CONNECT.
+- **BitTorrent v2.** `hash_request` / `hashes` / `hash_reject` are served and consumed, with received leaves folded into per-file merkle trees.
 - **Rate limiting.** Session-wide and per-torrent upload/download caps, enforced on the send path and via receive back-pressure.
 - **Discovery.** HTTP and UDP trackers, a live DHT node, web seeds (BEP-19), and UPnP plus NAT-PMP port mapping.
 
@@ -115,6 +136,6 @@ See **[Status & roadmap](about.md)** for the full porting map and what remains.
 
 ## Status
 
-KiteTorrent is pre-1.0 and actively developed. Downloading, seeding and magnet links all work end-to-end, anchored to ground truth: FIPS vectors for hashing, RFC 8032 for ed25519, real torrents from libtorrent's own test suite with info-hashes cross-checked against an independent implementation, and BEP golden bytes. What remains is tracked in **[Status & roadmap](about.md)**: LEDBAT congestion control for µTP, the threaded disk cache, BitTorrent-v2 download, MSE encryption wiring, proxies and the long-tail alert catalogue.
+KiteTorrent is pre-1.0 and actively developed. Downloading, seeding and magnet links all work end-to-end, anchored to ground truth: FIPS vectors for hashing, RFC 8032 for ed25519, real torrents from libtorrent's own test suite with info-hashes cross-checked against an independent implementation, and BEP golden bytes. What remains, plus the known defects, is tracked in **[Status & roadmap](about.md)**: there is no threaded disk cache, the alert catalogue is 51 classes against libtorrent's roughly 100, µTP does no path-MTU probing, and `FileDiskIo` cannot report data already on disk.
 
 This is an independent reimplementation, distributed under BSD-3-Clause, and is not affiliated with or endorsed by the libtorrent project.

@@ -11,8 +11,8 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
  * spreads across `src/pe_crypto.cpp` ([io.github.yuroyami.kitetorrent.crypto.Rc4],
  * `rc4_init`'s 1024-byte discard) and the `init_pe_rc4_handler` / `write_pe3_sync`
  * / `write_pe_vc_cryptofield` helpers in `src/bt_peer_connection.cpp`. Only the
- * byte transforms and key schedule live here; the actual reading/writing of the
- * handshake over a socket is Tier 2 and out of scope.
+ * byte transforms and key schedule live here. Reading and writing the handshake over
+ * a socket needs I/O, so it lives in the session artifact instead (`peer/Mse.kt`).
  *
  * The MSE handshake (see the spec at https://wiki.vuze.com/w/Message_Stream_Encryption):
  * after a Diffie-Hellman exchange (see [DhKeyExchange]) both peers share a 96-byte

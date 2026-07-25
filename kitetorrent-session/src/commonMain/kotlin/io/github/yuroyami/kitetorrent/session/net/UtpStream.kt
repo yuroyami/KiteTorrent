@@ -63,8 +63,9 @@ import kotlinx.coroutines.sync.withLock
  * uTP is connectionless at the socket layer: one [UdpSocket] multiplexes many
  * streams by `(connection_id)`. This class does **not** own the socket's receive
  * loop; the owner pumps inbound datagrams in by calling [onDatagram] with the raw
- * bytes of each packet addressed to this stream. (A full `utp_socket_manager` would
- * demultiplex by connection id; that router is out of scope here.)
+ * bytes of each packet addressed to this stream. [UtpSocketManager] is that owner in
+ * the engine — it runs the receive loop and demultiplexes by connection id, the role
+ * `utp_socket_manager` plays upstream.
  *
  * @param socket the shared UDP socket used to *send*; the owner drives receive.
  * @param remoteHost remote peer host.
@@ -131,7 +132,7 @@ class UtpStream(
 
     private val lock = Mutex()
 
-    // ---- congestion window (dynamic AIMD; LEDBAT delay-control is the next wave) --
+    // ---- congestion window (LEDBAT delay control over an AIMD substrate) ---------
     /** Our advertised receive-buffer size (the `wnd_size` we send peers); fixed. */
     private val recvWindowBytes = DEFAULT_SEND_WINDOW
     private var bytesInFlight = 0
@@ -164,10 +165,11 @@ class UtpStream(
     private var peerWindow = DEFAULT_SEND_WINDOW
 
     /**
-     * Congestion window in bytes (`m_cwnd`): slow-start grows it ~exponentially per RTT,
-     * congestion-avoidance ~linearly; a timeout collapses it to one MSS and a fast-resend
-     * halves it (TCP-style AIMD). LEDBAT will later modulate the *increase* by one-way
-     * delay so it yields to other traffic — the window machinery here is its substrate.
+     * Congestion window in bytes (`m_cwnd`). A timeout collapses it to one MSS and a
+     * fast-resend halves it, TCP-style. The increase is LEDBAT's, not TCP's:
+     * [growCwndLocked] scales each step by how far the measured queuing delay sits from
+     * the 100 ms [TARGET_DELAY_MICROS], so the window shrinks once the path starts
+     * queuing and uTP yields to other traffic on the same link.
      */
     private var cwnd = INIT_CWND
     /** Slow-start threshold: the cwnd at which we switch from exponential to linear growth. */
@@ -1044,7 +1046,7 @@ class UtpStream(
         /** Initial congestion window — two MSS, the conventional slow-start start. */
         const val INIT_CWND = 2 * DEFAULT_MAX_PAYLOAD
 
-        /** Cap on cwnd growth (bytes); the receiver's advertised window will cap it further later. */
+        /** Cap on cwnd growth (bytes). The peer's advertised `wnd_size` caps it further — see [awaitWindow]. */
         const val MAX_CWND = DEFAULT_SEND_WINDOW
 
         /** LEDBAT target queuing delay — 100 ms, the BEP-29 / libtorrent `target_delay`. */

@@ -61,9 +61,19 @@ The convenience overload discovers peers itself:
 ```kotlin
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
 import io.github.yuroyami.kitetorrent.session.disk.FileDiskIo
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
 import io.github.yuroyami.kitetorrent.torrent.MagnetUri
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-val engine = KiteTorrentEngine(scope, enableDht = true)
+val engine = KiteTorrentEngine(
+    scope,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    enableDht = true,
+)
 engine.start()
 
 val magnet = MagnetUri.parseMagnetUri("magnet:?xt=urn:btih:0496aa38...")
@@ -75,12 +85,26 @@ val session = engine.addMagnet(magnet) { torrent ->
 if (session == null) {
     println("no peer could supply the metadata")
 } else {
-    session.onPieceVerified = { piece -> println("piece $piece, ${session.progress() * 100}%") }
+    // onPieceVerified is a plain callback, so it cannot call the suspending progress().
+    session.onPieceVerified = { piece -> println("piece $piece verified") }
     session.onStateChanged = { state -> println("state: $state") }
+
+    // progress() suspends — read it from a coroutine.
+    scope.launch {
+        while (!session.isSeeding()) {
+            println("${(session.progress() * 100).toInt()}%")
+            delay(1_000)
+        }
+    }
 }
 ```
 
 `addMagnet` returns `TorrentSession?`. It is `null` when no peer was reachable or no peer would serve the metadata. Once you have a non-null session, it behaves exactly like one created from a `.torrent`: see [Downloading](downloading.md) for progress, piece verification, and resume data.
+
+!!! warning "Without an `HttpTracker`, HTTP announces are skipped"
+    `KiteTorrentEngine`'s `httpTracker` parameter defaults to `null`, and every announce path calls it null-safely. An engine built without one skips every `http://` and `https://` tracker announce: no exception, no alert, no log entry. `addMagnet` finds its peers through `announceForPeers`, so a magnet whose trackers are all HTTP discovers nothing and `addMagnet` returns `null` with no indication of why. UDP trackers and the DHT still work.
+
+    Pass `httpTracker = HttpTracker(HttpClient(CIO))` as shown above. The session module depends on `ktor-client-core` as `implementation` rather than `api`, so add `io.ktor:ktor-client-core` and a client engine to your own build: `ktor-client-cio` on JVM and Android, `ktor-client-darwin` on iOS. Ktor version 3.5.1.
 
 !!! tip "Inside the factory"
     The `torrent` passed to your factory is the fully parsed `TorrentInfo` reconstructed from the fetched metadata. You can read `torrent.name`, `torrent.files`, and `torrent.totalSize` to decide the save path or set per-file priorities before returning the `DiskIo`.
@@ -123,7 +147,11 @@ A magnet often arrives with no peers and only a thin tracker list, or no tracker
 Enable the DHT on the engine, then bootstrap it into the network before adding the magnet:
 
 ```kotlin
-val engine = KiteTorrentEngine(scope, enableDht = true)
+val engine = KiteTorrentEngine(
+    scope,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    enableDht = true,
+)
 engine.start()
 
 // Join the DHT via well-known router nodes.
@@ -168,11 +196,20 @@ A complete magnet download, from URI to verified pieces, using the DHT for disco
 ```kotlin
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
 import io.github.yuroyami.kitetorrent.session.disk.FileDiskIo
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
 import io.github.yuroyami.kitetorrent.torrent.MagnetUri
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 suspend fun fetch(scope: CoroutineScope, uri: String, saveDir: String) {
-    val engine = KiteTorrentEngine(scope, enableDht = true)
+    val engine = KiteTorrentEngine(
+        scope,
+        httpTracker = HttpTracker(HttpClient(CIO)),
+        enableDht = true,
+    )
     engine.start()
     engine.bootstrapDht(listOf("router.bittorrent.com" to 6881))
 
@@ -186,10 +223,17 @@ suspend fun fetch(scope: CoroutineScope, uri: String, saveDir: String) {
         return
     }
 
-    session.onPieceVerified = { piece ->
-        println("piece $piece verified, ${(session.progress() * 100).toInt()}%")
-    }
+    // onPieceVerified is a plain callback, so it cannot call the suspending progress().
+    session.onPieceVerified = { piece -> println("piece $piece verified") }
     session.onStateChanged = { state -> println("-> $state") }
+
+    // progress() suspends — read it from a coroutine.
+    scope.launch {
+        while (!session.isSeeding()) {
+            println("${(session.progress() * 100).toInt()}%")
+            delay(1_000)
+        }
+    }
 }
 ```
 

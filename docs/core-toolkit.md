@@ -156,8 +156,8 @@ val sig = Ed25519.sign(message, keypair.privateKey)
 val ok = Ed25519.verify(sig, message, keypair.publicKey)
 ```
 
-!!! note "MSE on the wire is a work in progress"
-    The MSE handshake codec exists in the core, but full integration into the live wire protocol is still follow-up work. See the roadmap on the [About](about.md) page.
+!!! note "These primitives drive the live wire"
+    The session module runs the MSE handshake in both directions on top of these types: `Mse.initiate` for outgoing connections, `Mse.accept` for incoming ones, with `Mse.looksLikePlaintextHandshake` deciding which path an inbound connection takes. Whether encryption is forced, preferred, or refused comes from the `OUT_ENC_POLICY` and `IN_ENC_POLICY` settings. See [Engine settings](engine-settings.md).
 
 ## Torrent metadata
 
@@ -389,7 +389,7 @@ import io.github.yuroyami.kitetorrent.dht.RoutingTable
 | **[Seeding](seeding.md)** | Create a torrent and serve it. |
 | **[Engine settings](engine-settings.md)** | `SettingsPack`, rate limits, the connection cap. |
 | **[Platform support](platforms.md)** | What runs where, and why. |
-| **[About / status](about.md)** | The honest porting map. |
+| **[About / status](about.md)** | What is ported, what is not, and what is next. |
 
 ## Install
 

@@ -11,21 +11,40 @@ Short, working solutions to common KiteTorrent tasks. Each snippet is copy-paste
 import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
 import io.github.yuroyami.kitetorrent.session.disk.FileDiskIo
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-val engine = KiteTorrentEngine(scope, enableDht = true)
+val engine = KiteTorrentEngine(
+    scope,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    enableDht = true,
+)
 engine.start()
 
 val torrent = TorrentInfo.parse(torrentBytes)
 val disk = FileDiskIo(torrent.storage, "/downloads", Dispatchers.IO, filePriorities = null)
 
 val session = engine.addTorrent(torrent, disk, resume = null)
-session.onPieceVerified = { piece ->
-    println("piece $piece verified, ${(session.progress() * 100).toInt()}% done")
+
+// onPieceVerified is a plain callback, so it cannot call the suspending progress().
+session.onPieceVerified = { piece -> println("piece $piece verified") }
+
+// progress() suspends — read it from a coroutine.
+scope.launch {
+    while (!session.isSeeding()) {
+        println("${(session.progress() * 100).toInt()}%")
+        delay(1_000)
+    }
 }
 ```
 
-`progress()` returns a `Float` from `0f` to `1f`. `onPieceVerified` fires after a piece passes its hash check and lands on disk.
+`onPieceVerified` fires after a piece passes its hash check and lands on disk. It is a plain `((Int) -> Unit)?`, so the suspending `progress()` has to be polled from a coroutine instead. `progress()` returns a `Float` from `0f` to `1f`, counting verified pieces over the torrent's total piece count.
+
+The `httpTracker` argument matters. Leave it at its `null` default and announces to `http://` and `https://` trackers are skipped without an error. [Getting started, Step 2](getting-started.md#step-2-create-the-engine) explains that and lists the ktor dependencies `HttpTracker` needs.
 
 ## Magnet to a folder
 
@@ -50,7 +69,7 @@ session?.onPieceVerified = { piece -> println("piece $piece") }
 
 ## Create a torrent, then seed it
 
-`CreateTorrent` produces the `.torrent` bytes from a `FileStorage`. Parse those bytes back into a `TorrentInfo`, then add it to the engine pointing at the source folder. The engine sees the files already present and moves straight to seeding.
+`CreateTorrent` produces the `.torrent` bytes from a `FileStorage`. Parse those bytes back into a `TorrentInfo`, then add it to the engine pointing at the source folder and force a full recheck so the existing files are claimed.
 
 ```kotlin
 import io.github.yuroyami.kitetorrent.torrent.CreateTorrent
@@ -66,10 +85,15 @@ val torrent = TorrentInfo.parse(torrentBytes)
 val disk = FileDiskIo(torrent.storage, "/path/to/source", Dispatchers.IO, filePriorities = null)
 val session = engine.addTorrent(torrent, disk, resume = null)
 
+// 3. FileDiskIo reports nothing present, so ask for a full rehash of the
+//    source files. Without this the engine claims zero pieces and
+//    re-downloads the data it is sitting on.
+session.recheck(full = true)
+
 session.onStateChanged = { state -> println("state: $state") }
 ```
 
-The session rechecks the on-disk files, claims every piece whose hash matches, and transitions to `TorrentState.SEEDING`. Save `torrentBytes` to a file or hand them to peers.
+`recheck(full = true)` hashes every piece against the torrent and claims the ones that match, after which the session moves to `TorrentState.SEEDING`. It is a full read plus a full SHA-1 pass over the source folder, so it costs real time on a large torrent. `addTorrent` calls `session.start()` internally, so the recheck has to come afterwards. See [Resuming a download](downloading.md#resuming-a-download) for why `FileDiskIo` needs this. Save `torrentBytes` to a file or hand them to peers.
 
 ## Cap the download rate
 
@@ -108,7 +132,7 @@ for (file in torrent.files) {
 
 ## Resume an interrupted download
 
-Before shutting down, ask the session for its resume data and persist the bytes. Next launch, read them back into an `AddTorrentParams` and pass it as the `resume` argument. The session rehashes what is already on disk and continues from there.
+Before shutting down, ask the session for its resume data and persist the bytes. Next launch, read them back into an `AddTorrentParams` and pass it as the `resume` argument. The session adopts the saved piece bitfield and continues from there.
 
 === "Save on shutdown"
 
@@ -133,7 +157,7 @@ Before shutting down, ask the session for its resume data and persist the bytes.
     val session = engine.addTorrent(torrent, disk, resume = resume)
     ```
 
-`saveResumeData()` captures verified pieces, byte counters, and file priorities. On restore, the session verifies the resumed pieces against the torrent's hashes before trusting them, so a partial or corrupted file is detected rather than served.
+`saveResumeData()` captures verified pieces, the partial-block progress of unfinished pieces, byte counters, and file priorities. On restore the session takes the saved bitfield as given and skips the disk read, which is what makes fast resume fast. Those pieces were hash-checked when they were first written, but the resume file is trusted on its word: if the files changed underneath it, call `session.recheck(full = true)` after `addTorrent` to rehash everything.
 
 !!! note "Save the DHT table too"
     The DHT routing table is engine-wide, not per-torrent. Persist it with `engine.saveDhtState()` and feed it back via `engine.restoreDhtState(bytes)` so the next session bootstraps faster.

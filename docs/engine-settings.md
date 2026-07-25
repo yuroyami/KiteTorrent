@@ -1,6 +1,6 @@
 # Engine settings
 
-Tune the KiteTorrent engine the way libtorrent does: through a ported `SettingsPack` plus a handful of direct engine knobs. This page covers the settings model, rate limiting, the TCP and uTP transports, the DHT node, trackers, and port mapping. Everything here is configured from shared Kotlin code and behaves the same on every target the session module ships for.
+Tune the KiteTorrent engine the way libtorrent does: through a ported `SettingsPack` plus a handful of direct engine knobs. This page covers the settings model, rate limiting, the TCP and uTP transports, the DHT node, trackers, proxies, encryption, and port mapping. Everything here is configured from shared Kotlin code and behaves the same on every target the session module ships for.
 
 ## Where settings live
 
@@ -8,21 +8,43 @@ KiteTorrent has two kinds of configuration, and the split matters:
 
 | Kind | Set where | Examples |
 |---|---|---|
-| **Engine-level** | `KiteTorrentEngine(...)` constructor or direct setters | `listenPort`, `enableDht`, `enableUtp`, rate limits, connection cap |
+| **Engine-level** | `KiteTorrentEngine(...)` constructor or direct setters | `listenPort`, `enableDht`, `enableUtp`, `httpTracker`, rate limits, connection cap |
 | **`SettingsPack`** | a `SettingsPack` passed at construction or applied later | `piece_timeout`, `request_queue_time`, `strict_end_game_mode`, `connections_limit` |
 
-The `SettingsPack` is the ported libtorrent knob bag. The engine reads its values (and falls back to libtorrent's own defaults when a key is unset). The constructor parameters that are not in `SettingsPack`: `peerId`, `listenPort`, `enableDht`, `enableUtp`, `httpTracker`, `clock`, `httpClient`, `gateway`, are engine wiring, not settings.
+The `SettingsPack` is the ported libtorrent knob bag. The engine reads its values (and falls back to libtorrent's own defaults when a key is unset). The constructor parameters that are not in `SettingsPack` — `peerId`, `listenPort`, `httpTracker`, `enableDht`, `enableUtp`, `clock`, `httpClient`, `gateway` — are engine wiring, not settings.
 
 ```kotlin
+import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
+import io.github.yuroyami.kitetorrent.settings.SettingsPack
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+
 val engine = KiteTorrentEngine(
     scope        = scope,
     listenPort   = 6881,
+    httpTracker  = HttpTracker(HttpClient(CIO)),
     enableDht    = true,
     enableUtp    = true,
     settings     = SettingsPack(),   // libtorrent defaults
 )
 engine.start()
 ```
+
+### Constructor parameters
+
+| Parameter | Default | What it does |
+|---|---|---|
+| `scope` | — | The `CoroutineScope` every engine coroutine runs in. |
+| `peerId` | random | The 20-byte peer ID advertised in handshakes. |
+| `listenPort` | `6881` | Requested TCP/UDP listen port. The actual port lands in `boundListenPort`. |
+| `httpTracker` | `null` | The `HttpTracker` used for `http://` and `https://` announces. Left null, those announces are skipped silently (see [Trackers](#trackers)). |
+| `enableDht` | `false` | Brings up the live DHT node. |
+| `enableUtp` | `false` | Enables the uTP transport (BEP-29). |
+| `clock` | `{ 0L }` | Epoch-seconds provider used for DHT expiry. |
+| `settings` | `SettingsPack()` | The settings pack the engine reads live. |
+| `httpClient` | `null` | ktor client for the UPnP SOAP flow. Null skips UPnP; NAT-PMP still runs when `gateway` is set. |
+| `gateway` | `null` | LAN default-gateway IPv4 literal for NAT-PMP. Null disables NAT-PMP. |
 
 !!! note
     The session engine lives in `:kitetorrent-session`. It targets Android, iOS, and the JVM. There is no JS target: browsers have no raw TCP/UDP sockets, so a live engine cannot run there. The pure `:kitetorrent` core (which is where `SettingsPack` is defined) does compile for JS, so you can build and inspect a settings pack anywhere.
@@ -38,14 +60,16 @@ import io.github.yuroyami.kitetorrent.settings.BoolSetting
 
 val pack = SettingsPack()
 
-pack.setInt(IntSetting.piece_timeout, 15)
-pack.setInt(IntSetting.request_queue_time, 3)
-pack.setInt(IntSetting.connections_limit, 200)
-pack.setBool(BoolSetting.strict_end_game_mode, true)
+pack.setInt(IntSetting.PIECE_TIMEOUT, 15)
+pack.setInt(IntSetting.REQUEST_QUEUE_TIME, 3)
+pack.setInt(IntSetting.CONNECTIONS_LIMIT, 200)
+pack.setBool(BoolSetting.STRICT_END_GAME_MODE, true)
 
-val timeout = pack.getInt(IntSetting.piece_timeout)
-val strict  = pack.getBool(BoolSetting.strict_end_game_mode)
+val timeout = pack.getInt(IntSetting.PIECE_TIMEOUT)
+val strict  = pack.getBool(BoolSetting.STRICT_END_GAME_MODE)
 ```
+
+The Kotlin constants are the upper-case form of libtorrent's setting names: `piece_timeout` is `IntSetting.PIECE_TIMEOUT`, `strict_end_game_mode` is `BoolSetting.STRICT_END_GAME_MODE`, and so on. This page uses the libtorrent names in prose and the Kotlin constants in code.
 
 The setting keys are grouped by value type into three objects:
 
@@ -56,8 +80,8 @@ The setting keys are grouped by value type into three objects:
 Other members let you query and clear entries:
 
 ```kotlin
-pack.hasVal(IntSetting.piece_timeout)   // is this key set?
-pack.clear(IntSetting.piece_timeout)    // unset one key
+pack.hasVal(IntSetting.PIECE_TIMEOUT)   // is this key set?
+pack.clear(IntSetting.PIECE_TIMEOUT)    // unset one key
 pack.clear()                            // unset everything
 ```
 
@@ -87,8 +111,8 @@ Pass a pack at construction for the initial configuration, or apply a new one at
 
 ```kotlin
 val newPack = SettingsPack().apply {
-    setInt(IntSetting.connections_limit, 400)
-    setBool(BoolSetting.strict_end_game_mode, false)
+    setInt(IntSetting.CONNECTIONS_LIMIT, 400)
+    setBool(BoolSetting.STRICT_END_GAME_MODE, false)
 }
 engine.applySettings(newPack)
 ```
@@ -148,8 +172,8 @@ val total = engine.numConnections()   // suspend: all peer connections
 val utp   = engine.numUtpStreams()    // suspend: just the uTP streams
 ```
 
-!!! warning
-    uTP currently runs a **fixed send window**. LEDBAT congestion control and the retransmission timer are not yet ported, so uTP does not yet yield to other traffic the way upstream libtorrent does. This is tracked in [About & status](about.md). TCP is unaffected.
+!!! note "Congestion control"
+    The uTP stream runs LEDBAT: it tracks a rolling-minimum base delay, measures queuing delay against a 100 ms target, and scales the send window by how far the measurement sits from that target, so uTP backs off when the link starts queuing. Slow-start exits either at `ssthresh` or as soon as queuing delay crosses the target, and the window only grows while the writer is actually saturating it. Around that sit a retransmission timer with exponential backoff, go-back-N resend, selective ACK in both directions, duplicate-ACK fast resend, and Nagle coalescing.
 
 ## DHT
 
@@ -187,8 +211,25 @@ engine.restoreDhtState(state)
 
 The engine announces over both tracker transports:
 
-- **HTTP/HTTPS** trackers via `HttpTracker`.
-- **UDP** trackers via `UdpTracker` (BEP-15).
+- **HTTP/HTTPS** trackers via `HttpTracker`, which you pass to the constructor.
+- **UDP** trackers via `UdpTracker` (BEP-15), which the engine builds itself.
+
+!!! warning "`httpTracker` defaults to null"
+    Both announce paths — the per-session one and `announceForPeers`, which backs `discoverPeers` and the single-argument `addMagnet` — call the tracker null-safely. An engine constructed without an `HttpTracker` therefore skips every `http://` and `https://` announce: no exception, no alert, no log entry, and no peers from those trackers. A magnet whose tracker list is entirely HTTP then finds nothing and `addMagnet` returns `null`.
+
+```kotlin
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+
+val engine = KiteTorrentEngine(
+    scope,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    enableDht = true,
+)
+```
+
+`HttpTracker(client, maxResponseBytes, network)` takes the ktor `HttpClient` from you so the platform engine is your choice: `ktor-client-cio` on JVM and Android, `ktor-client-darwin` on iOS. The session module depends on `ktor-client-core` as `implementation` rather than `api`, so add `io.ktor:ktor-client-core` and a client engine to your own build (Ktor 3.5.1). `maxResponseBytes` bounds a tracker reply body at 2 MiB by default and rejects anything larger with `PACKET_TOO_LARGE`. `network` is what lets a plain `http://` announce go through a proxy; see [Proxies](#proxies).
 
 For most flows you do not touch the tracker classes directly; you add a torrent and the engine announces to the trackers in its metadata. When you do want to drive discovery by hand, the engine exposes it:
 
@@ -204,6 +245,63 @@ val counts: ScrapeResponse? =
 
 Both are `suspend` functions. `ScrapeResponse` carries `seeders`, `leechers`, and `completed`.
 
+## Proxies
+
+Outbound TCP dials, both peers and trackers, can go through a proxy. Three kinds are implemented in `session.net`: SOCKS5 (RFC 1928, with RFC 1929 username/password auth), SOCKS4/4a, and HTTP CONNECT.
+
+The declarative path is the settings pack, which the engine maps onto its runtime proxy in `applyProxyFromSettings()`:
+
+```kotlin
+import io.github.yuroyami.kitetorrent.settings.ProxyType
+import io.github.yuroyami.kitetorrent.settings.StringSetting
+
+val pack = SettingsPack().apply {
+    setInt(IntSetting.PROXY_TYPE, ProxyType.SOCKS5_PW)
+    setString(StringSetting.PROXY_HOSTNAME, "127.0.0.1")
+    setInt(IntSetting.PROXY_PORT, 1080)
+    setString(StringSetting.PROXY_USERNAME, "user")
+    setString(StringSetting.PROXY_PASSWORD, "secret")
+}
+```
+
+`ProxyType` values are `NONE`, `SOCKS4`, `SOCKS5`, `SOCKS5_PW`, `HTTP`, `HTTP_PW` and `I2P_PROXY`. `NONE` clears any proxy; the I2P type is not wired and leaves the current proxy untouched, as does a blank hostname.
+
+There are imperative setters as well:
+
+```kotlin
+engine.setSocks5Proxy("127.0.0.1", 1080, username = "user", password = "secret")
+engine.setSocks4Proxy("127.0.0.1", 1080, username = "user")
+engine.setHttpProxy("proxy.example", 3128)
+```
+
+!!! warning "The setters lose to the settings pack"
+    `start()` and `applySettings()` both call `applyProxyFromSettings()`, and `proxy_type` defaults to `NONE`, which clears the proxy. A proxy set with `setSocks5Proxy` before `start()`, or before an `applySettings` call whose pack does not carry `PROXY_TYPE`, is discarded. Either set the proxy through the settings pack, or call the setter after `start()` and after every `applySettings`.
+
+With a SOCKS5 proxy the engine also opens a UDP ASSOCIATE relay and routes the shared UDP socket through it, so DHT traffic and uTP travel over the proxy on the same physical socket. SOCKS4 and HTTP CONNECT have no UDP mode, so UDP stays direct with those.
+
+`HttpTracker` tunnels an announce through the proxy only for plain `http://` URLs, and only when it was constructed with a `NetworkRuntime` as its third argument. An `https://` announce always goes out directly on the injected ktor client, because TLS is not run over the raw tunnel. The engine builds its own `NetworkRuntime` (`engine.network`) during construction, so an `HttpTracker` handed to the constructor has `network = null` and every announce takes the ktor client's own path.
+
+### anonymous_mode
+
+`BoolSetting.ANONYMOUS_MODE` does three things and no more:
+
+- `start()` opens no listen socket, so there are no inbound connections and no identifying listen port.
+- UPnP and NAT-PMP are skipped.
+- Each torrent gets a freshly generated random peer ID instead of the engine-wide `peerId`.
+
+It does not require or force a proxy. With no proxy configured, the engine still dials out directly; nothing refuses to connect. Configure a proxy yourself if that is what you are after.
+
+## Encryption (MSE)
+
+Message Stream Encryption runs on live connections in both directions. Outgoing dials go through `Mse.initiate`; inbound connections are sniffed with `Mse.looksLikePlaintextHandshake` and, when they are not plaintext, handed to `Mse.accept`. Two settings decide the policy, using libtorrent's `enc_policy` values (`EncPolicy.PE_FORCED`, `PE_ENABLED`, `PE_DISABLED`):
+
+| Setting | Effect |
+|---|---|
+| `IntSetting.OUT_ENC_POLICY` | Whether outgoing connections are encrypted, attempt encryption with a plaintext fallback, or stay plaintext. |
+| `IntSetting.IN_ENC_POLICY` | `PE_FORCED` drops an inbound plaintext handshake; `PE_DISABLED` drops an inbound encrypted one. |
+
+`IntSetting.ALLOWED_ENC_LEVEL` and `BoolSetting.PREFER_RC4` are declared in the settings pack but nothing in the session module reads them.
+
 ## Port mapping
 
 To accept inbound connections behind a home router, the listen port needs to be forwarded. KiteTorrent ports both mapping protocols:
@@ -211,13 +309,15 @@ To accept inbound connections behind a home router, the listen port needs to be 
 - **UPnP**: `io.github.yuroyami.kitetorrent.session.net.Upnp`
 - **NAT-PMP**: `io.github.yuroyami.kitetorrent.session.net.NatPmp`
 
-Pass the router address through the `gateway` constructor parameter so the engine can map its listen port:
+Both are gated on settings (`enable_upnp`, `enable_natpmp`) and on constructor wiring. UPnP needs an `httpClient` to drive the IGD SOAP flow, and is skipped when that is null. NAT-PMP needs the LAN gateway address, which common Kotlin cannot look up, so you pass it as `gateway`; null disables NAT-PMP.
 
 ```kotlin
 val engine = KiteTorrentEngine(
-    scope      = scope,
-    listenPort = 6881,
-    gateway    = "192.168.1.1",
+    scope       = scope,
+    listenPort  = 6881,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    httpClient  = HttpClient(CIO),   // UPnP is skipped without this
+    gateway     = "192.168.1.1",     // NAT-PMP is skipped without this
 )
 ```
 
@@ -249,24 +349,28 @@ A fully configured engine, start to finish:
 
 ```kotlin
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
+import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
 import io.github.yuroyami.kitetorrent.settings.SettingsPack
 import io.github.yuroyami.kitetorrent.settings.IntSetting
 import io.github.yuroyami.kitetorrent.settings.BoolSetting
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
 
 val settings = SettingsPack().apply {
-    setInt(IntSetting.connections_limit, 200)
-    setInt(IntSetting.piece_timeout, 15)
-    setInt(IntSetting.request_queue_time, 3)
-    setBool(BoolSetting.strict_end_game_mode, true)
+    setInt(IntSetting.CONNECTIONS_LIMIT, 200)
+    setInt(IntSetting.PIECE_TIMEOUT, 15)
+    setInt(IntSetting.REQUEST_QUEUE_TIME, 3)
+    setBool(BoolSetting.STRICT_END_GAME_MODE, true)
 }
 
 val engine = KiteTorrentEngine(
-    scope      = scope,
-    listenPort = 6881,
-    enableDht  = true,
-    enableUtp  = true,
-    gateway    = "192.168.1.1",
-    settings   = settings,
+    scope       = scope,
+    listenPort  = 6881,
+    httpTracker = HttpTracker(HttpClient(CIO)),
+    enableDht   = true,
+    enableUtp   = true,
+    gateway     = "192.168.1.1",
+    settings    = settings,
 )
 engine.start()
 
@@ -280,7 +384,11 @@ engine.bootstrapDht(
 
 ## Status
 
-The settings model, rate limiter, both transports, the DHT node, both tracker types, and port mapping all run today and are exercised by the loopback integration suite (a rate-limited download and the connection cap both have dedicated tests). The known gap is uTP congestion control: the stream uses a fixed window without LEDBAT or retransmission yet. Proxy support (`setSocks5Proxy` and friends) and MSE encryption wiring are follow-up work. The honest, detailed map is in [About & status](about.md).
+The settings model, rate limiter, both transports, the DHT node, both tracker types, and port mapping all run today and are exercised by the loopback integration suite, with dedicated tests for a rate-limited download and for the connection cap.
+
+uTP congestion control is in: LEDBAT against a 100 ms target delay, a retransmission timer with exponential backoff, go-back-N resend, selective ACK both ways, and duplicate-ACK fast resend, covered by `UtpLedbatTest`, `UtpCongestionTest`, `UtpRetransmitTest`, `UtpFastResendTest` and `UtpFlowControlTest`. Proxies are in: SOCKS5 including UDP ASSOCIATE, SOCKS4/4a and HTTP CONNECT, covered by `Socks5Test`, `Socks5UdpTest`, `Socks4Test`, `HttpProxyTest` and `HttpTrackerProxyTest`. MSE runs on live connections in both directions with plaintext sniffing on the inbound path, covered by `MseHandshakeTest` and `TwoEngineExchangeTest.twoEnginesExchangeWithEncryptionForced`.
+
+What is not here: there is no threaded disk cache (libtorrent 2.0 removed its own disk cache in favour of mmap, so the gap is narrower than it sounds), and the alert catalogue is 51 classes against libtorrent's roughly 100. The detailed map is in [About & status](about.md).
 
 ## Related
 
