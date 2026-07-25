@@ -1,31 +1,35 @@
 # KiteTorrent
 
-A BitTorrent engine written entirely in Kotlin, for apps that need to download or
-seed torrents from shared Kotlin Multiplatform code.
+A BitTorrent engine written entirely in Kotlin. Use it to download or seed torrents
+from shared Kotlin Multiplatform code. It is a Kotlin reimplementation of
+[libtorrent](https://github.com/arvidn/libtorrent) 2.0.12, and it covers downloads,
+seeding, magnet links, a DHT node, µTP, encryption and proxies.
 
 [![Docs](https://img.shields.io/badge/docs-yuroyami.github.io-1f6feb)](https://yuroyami.github.io/KiteTorrent/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Targets](https://img.shields.io/badge/targets-Android%20|%20iOS%20|%20JVM%20|%20JS-success)](#targets)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-lightgrey)](#license-and-credits)
 
+**[Documentation](https://yuroyami.github.io/KiteTorrent/)** · a guide per task, plus
+the generated API reference.
+
 ## What you get
 
-KiteTorrent is a from-scratch port of [libtorrent](https://github.com/arvidn/libtorrent)
-RC_2_0 (2.0.12) to Kotlin. There is no JNI, no cinterop and no bundled native
-binary: the protocol stack, the piece picker, the DHT, the trackers and the
-session loop are all `.kt` files that compile for Android, iOS, the JVM and — for
-the parts that do not need a socket — the browser.
+There is no JNI, no cinterop and no bundled native binary. The protocol stack, the
+piece picker, the DHT, the trackers and the session loop are all `.kt` files. They
+compile for Android, iOS and the JVM. The parts that do not need a socket also compile
+for the browser.
 
-It ships as two artifacts. `kitetorrent` is everything that is pure computation:
-bencoding, hashing, `.torrent` and magnet parsing, the wire-protocol codec, the
-piece picker, the DHT data structures. Its only dependency is `kotlin-stdlib`.
-`kitetorrent-session` is the live engine — sockets, disk, trackers, a DHT node —
-and it adds coroutines, `ktor-network` and `kotlinx-io`. There is no stdlib-only
-way to open a socket, so the core does not have one.
+KiteTorrent ships as two artifacts. `kitetorrent` is everything that is pure
+computation: bencoding, hashing, `.torrent` and magnet parsing, the wire-protocol
+codec, the piece picker, the DHT data structures. Its only dependency is
+`kotlin-stdlib`. `kitetorrent-session` is the live engine: sockets, disk, trackers and
+a DHT node. It adds coroutines, `ktor-network` and `kotlinx-io`. There is no
+stdlib-only way to open a socket, so the core does not have one.
 
-Downloads, seeding and magnet links all work end to end between two real engines
-over real sockets. Two of its defaults fail silently — no exception, no alert, no
-log entry — so read [Limits](#limits) before building against it.
+Downloads, seeding and magnet links all work end to end between two real engines over
+real sockets. Two defaults fail silently, with no exception, no alert and no log entry.
+Read [Limits](#limits) before you build against it.
 
 ```kotlin
 import io.github.yuroyami.kitetorrent.session.disk.FileDiskIo
@@ -71,8 +75,8 @@ scope.launch {
 
 ## Install
 
-KiteTorrent is not on Maven Central. It is versioned `0.0.1-SNAPSHOT` and
-consumed through `mavenLocal()`, so publish it yourself first:
+KiteTorrent is not on Maven Central. It is versioned `0.0.1-SNAPSHOT` and consumed
+through `mavenLocal()`, so publish it yourself first:
 
 ```bash
 ./gradlew publishToMavenLocal
@@ -106,9 +110,9 @@ from source needs JDK 21 and the Android SDK, with `sdk.dir` set in
 
 ### Download from a magnet link
 
-`addMagnet` pools peers from the DHT and the magnet's trackers, fetches the
-metadata over `ut_metadata` (BEP-9/10), then starts a normal download. It returns
-`null` when no peer would supply the metadata.
+`addMagnet` pools peers from the DHT and the magnet's trackers. It fetches the metadata
+over `ut_metadata` (BEP-9/10), then starts a normal download. It returns `null` when no
+peer will supply the metadata.
 
 ```kotlin
 val magnet = MagnetUri.parseMagnetUri("magnet:?xt=urn:btih:0496aa38...")
@@ -117,13 +121,13 @@ val session = engine.addMagnet(magnet) { info ->
 }
 ```
 
-There is a second overload, `addMagnet(magnet, peers, diskFactory)`, that skips
-discovery and uses the `List<PeerEndpoint>` you pass.
+There is a second overload, `addMagnet(magnet, peers, diskFactory)`. It skips peer
+discovery and fetches the metadata from the `List<PeerEndpoint>` you pass.
 
 ### Seed a torrent you already have
 
 Add the torrent with a disk pointed at the existing files, then rehash them.
-The `full = true` argument is required with `FileDiskIo` — see [Limits](#limits).
+The `full = true` argument is required with `FileDiskIo`. See [Limits](#limits).
 
 ```kotlin
 val session = engine.addTorrent(torrent, FileDiskIo(torrent.storage, "/srv/data", Dispatchers.IO))
@@ -131,14 +135,16 @@ session.recheck(full = true)   // hashes every piece; claims the ones that match
 session.onStateChanged = { state -> println(state) }   // reaches TorrentState.SEEDING
 ```
 
-Uploads run libtorrent's `choker.cpp`: periodic choke rounds rank interested
-peers by transfer rate, fill `uploadSlots`, and rotate one optimistic slot.
+Uploads run on periodic choke rounds. Each round ranks the interested peers by transfer
+rate and fills `uploadSlots` with the fastest ones. One extra slot rotates between the
+remaining peers, so a new peer can show what speed it offers.
 
 ### Encrypt peer connections
 
-Message Stream Encryption works in both directions and is driven by two settings.
-Inbound connections are sniffed for a plaintext BitTorrent handshake and fall
-through to the unencrypted path unless the policy forbids it.
+Message Stream Encryption works in both directions. Two settings drive it. The engine
+inspects each inbound connection first. A connection that opens with a plaintext
+BitTorrent handshake stays unencrypted, unless the policy forbids plaintext. Every
+other inbound connection goes through the encrypted handshake.
 
 ```kotlin
 val settings = SettingsPack().apply {
@@ -148,16 +154,16 @@ val settings = SettingsPack().apply {
 val engine = KiteTorrentEngine(scope, settings = settings)
 ```
 
-`PE_ENABLED` (the default) prefers encryption and falls back to plaintext;
-`PE_FORCED` refuses plaintext; `PE_DISABLED` refuses encryption.
+`PE_ENABLED` (the default) prefers encryption and accepts plaintext when the peer
+cannot encrypt. `PE_FORCED` refuses plaintext. `PE_DISABLED` refuses encryption.
 
 ### Go through a proxy
 
 SOCKS5, SOCKS4/4a and HTTP CONNECT are all implemented. Configure them through
-`SettingsPack` before `start()` and the engine also negotiates a SOCKS5 UDP
-ASSOCIATE relay for the shared UDP socket, so the DHT and µTP go through the
-proxy too. The imperative setters (`engine.setSocks5Proxy(...)` and friends) only
-affect outbound TCP dials.
+`SettingsPack` before `start()`. The engine also negotiates a SOCKS5 UDP ASSOCIATE
+relay for the shared UDP socket, so the DHT and µTP travel through the proxy as well.
+The imperative setters (`engine.setSocks5Proxy(...)` and the equivalents for the other
+kinds) only affect outbound TCP dials.
 
 ```kotlin
 val settings = SettingsPack().apply {
@@ -174,8 +180,7 @@ announce always goes out directly on the ktor client you injected.
 ### Read and build torrents without an engine
 
 The core artifact alone parses `.torrent` files and magnet URIs, hashes data and
-produces v1, v2 and hybrid torrents whose bytes match libtorrent's. This is the
-part that runs in the browser.
+produces v1, v2 and hybrid torrents. This is the part that runs in the browser.
 
 ```kotlin
 val info = TorrentInfo.parse(bytes)
@@ -205,36 +210,34 @@ hashing and torrent creation work in the browser.
 ## Limits
 
 **HTTP and HTTPS tracker announces do nothing unless you pass an `HttpTracker`.**
-The `httpTracker` constructor parameter defaults to `null`, and both announce
-paths are null-safe calls (`TorrentSession.kt:679`,
-`KiteTorrentEngine.kt:655`). Nothing throws, nothing is logged, no alert is
-posted — the announce simply does not happen. Most public torrents list HTTP
-trackers, so the engine finds no peers and reports no reason. Construct one as in
-the example above.
+The `httpTracker` constructor parameter defaults to `null`. Both announce paths are
+null-safe calls (`TorrentSession.kt:685`, `KiteTorrentEngine.kt:656`), so the announce
+never happens. Nothing throws, nothing is logged and no alert is posted. Most public
+torrents list HTTP trackers. You see an engine that finds no peers and reports no
+error. Construct an `HttpTracker` as in the example above.
 
-**`FileDiskIo` cannot resume or seed from data already on disk.** Its
-`checkExistingFiles()` returns an all-`false` array (`FileDiskIo.kt:216`), and
-`recheck()` defaults to `full = false`, which consults exactly that array.
-`addTorrent` calls `start()`, which calls `recheck()`, so you cannot intercept it.
-Point `FileDiskIo` at a complete copy and the session reports zero pieces and
-re-downloads the whole torrent over the existing files. Call
-`session.recheck(full = true)` after `addTorrent` to rehash everything. Passing
-saved resume data as the third `addTorrent` argument avoids the problem entirely,
-because that takes a different branch. `InMemoryDiskIo` returns a real array,
-which is why no integration test ever caught this.
+**`FileDiskIo` cannot resume or seed from data already on disk.** Point it at a
+complete copy and the session reports zero pieces. It then downloads the whole torrent
+again, over the files that are already there. Its `checkExistingFiles()` returns an
+all-`false` array (`FileDiskIo.kt:216`), and `recheck()` defaults to `full = false`,
+which reads exactly that array. `addTorrent` calls `start()`, which calls `recheck()`,
+so there is no point where you can intervene. Call `session.recheck(full = true)` after
+`addTorrent` to hash every piece. Saved resume data, passed as the third `addTorrent`
+argument, avoids the problem completely, because it takes a different branch.
+`InMemoryDiskIo` returns a real array, so no integration test caught this.
 
 - `progress()` is `numHave / numPieces` over every piece in the torrent
-  (`TorrentSession.kt:311`). It is not byte-weighted, and it does not subtract
-  filtered pieces, so any file set to `IGNORE` priority means it can never reach
+  (`TorrentSession.kt:316`). It is not byte-weighted, and it does not subtract
+  filtered pieces. Any file set to `IGNORE` priority means it can never reach
   `1.0`. `isSeeding()` has the same problem and never becomes true for such a
   torrent. The picker exposes the correct predicate, `isFinished()`, but the
   session does not call it.
 - `FileDiskIo`'s `dispatcher` parameter defaults to `Dispatchers.Default`, which
   puts blocking file syscalls on the CPU dispatcher. Pass `Dispatchers.IO`.
 - There is no threaded disk cache. Writes go straight through to the file handle
-  under a per-file mutex. libtorrent 2.0 removed its own disk cache in favour of
-  mmap, so this is a smaller gap than it looks, but there is no batching either.
-- The alert catalogue is 51 classes against libtorrent's roughly 100.
+  under a per-file mutex. There is no batching either.
+- The alert catalogue has 51 concrete classes, so some events have no alert you can
+  observe.
 - µTP does no path-MTU probing. The MSS starts at 1400 and only shrinks, by 64
   bytes after two consecutive timeout rounds, down to 1212. It never grows back.
 - `anonymous_mode` does not force a proxy. It skips the inbound listen socket,
@@ -246,48 +249,46 @@ which is why no integration test ever caught this.
 
 ## Testing
 
-567 tests on the JVM path — 462 in the core's common suite, 105 in the session
-module. 566 pass. `Socks5UdpTest.proxiedUdpSocketWrapsAndUnwrapsThroughRelay`
-times out after 15 seconds against its own loopback relay and has been failing
-locally; nothing else does. Correctness is otherwise anchored to external ground
-truth: FIPS vectors for SHA-1/256/512, RFC 8032 for ed25519, real torrents from
-libtorrent's own test tree with info-hashes cross-checked against an independent
-implementation, and BEP golden bytes for the DHT, ut_pex and the UDP tracker.
+The JVM path runs 567 tests: 462 in the core's common suite and 105 in the session
+module. 566 pass. `Socks5UdpTest.proxiedUdpSocketWrapsAndUnwrapsThroughRelay` times
+out after 15 seconds against its own loopback relay. That one failure repeats on every
+local run, and nothing else fails.
+
+The suites check their results against published reference data: FIPS vectors for
+SHA-1/256/512, RFC 8032 for ed25519, real `.torrent` files whose info-hashes are
+cross-checked against an independent implementation, and BEP golden bytes for the DHT,
+ut_pex and the UDP tracker.
 
 ```bash
 ./gradlew :kitetorrent:jvmTest              # pure-core suite
 ./gradlew :kitetorrent-session:jvmTest      # engine suite incl. the loopback runs
 ```
 
-The loopback tests run over real sockets: a TCP download from a seeder
-(`LoopbackDownloadTest`), two engines exchanging a torrent in plaintext and with
-MSE forced (`TwoEngineExchangeTest`), the same exchange entirely over µTP
-(`UtpEngineExchangeTest`), a `ut_metadata` fetch and full magnet download
-(`MagnetEndToEndTest`), a v2-only torrent (`V2ExchangeTest`), a scripted peer that
-withholds blocks (`Wave5RobustnessTest`, `Wave6RobustnessTest`), rate limiting
-(`RateLimiterTest`), and the SOCKS4/SOCKS5/HTTP-CONNECT proxy suite.
+The loopback tests run over real sockets:
 
-Two gaps worth knowing. `FileDiskIoTest` contains a single test, and every
-engine-level integration test uses `InMemoryDiskIo` — which is how the
-`checkExistingFiles` bug above shipped. And `.github/workflows/` contains only
-`docs.yml`, so none of these tests run on push.
+| Test | What it exercises |
+| --- | --- |
+| `LoopbackDownloadTest` | a TCP download from a seeder |
+| `TwoEngineExchangeTest` | two engines exchanging a torrent, in plaintext and with MSE forced |
+| `UtpEngineExchangeTest` | the same exchange entirely over µTP |
+| `MagnetEndToEndTest` | a `ut_metadata` fetch and a full magnet download |
+| `V2ExchangeTest` | a v2-only torrent |
+| `Wave5RobustnessTest`, `Wave6RobustnessTest` | a scripted peer that withholds blocks |
+| `RateLimiterTest` | rate limiting |
+| the proxy suite | SOCKS4, SOCKS5 and HTTP CONNECT |
 
-## Documentation
-
-[Guides and the full API reference](https://yuroyami.github.io/KiteTorrent/), plus
-[PORTING_STATUS.md](PORTING_STATUS.md) for the component-by-component map against
-libtorrent.
+Two gaps are worth knowing. `FileDiskIoTest` contains a single test, and every
+engine-level integration test uses `InMemoryDiskIo`. That is how the
+`checkExistingFiles` defect above went unnoticed. `.github/workflows/` contains only
+`docs.yml`, so no workflow runs these tests on push.
 
 ## License and credits
 
-KiteTorrent is a derivative work of **libtorrent** by Arvid Norberg and
-contributors, distributed under the **BSD-3-Clause** license. The original
-copyright notices are retained per file wherever code is ported directly. This
-port — the Kotlin translation and the architecture around it — is provided under
-the same terms.
-
-This is an independent reimplementation, not affiliated with or endorsed by the
-libtorrent project.
+KiteTorrent is a derivative work of **libtorrent** by Arvid Norberg and contributors,
+distributed under the **BSD-3-Clause** license. The original copyright notices are kept
+per file wherever code was translated directly. The Kotlin code and the architecture
+around it use the same terms. This is an independent reimplementation. It is not
+affiliated with or endorsed by the original project.
 
 Part of the Kite family: [KiteCore](https://github.com/yuroyami/KiteCore),
 [KitePDF](https://github.com/yuroyami/KitePDF).

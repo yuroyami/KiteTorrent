@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Tests for [BandwidthChannel] / [BwRequest] / [BandwidthManager] — the port of
+ * Tests for [BandwidthChannel] / [BwRequest] / [BandwidthManager], the port of
  * libtorrent's token-bucket rate limiter (aux_/bandwidth_limit.hpp,
  * bandwidth_limit.cpp, aux_/bandwidth_queue_entry.hpp, bandwidth_queue_entry.cpp,
  * aux_/bandwidth_manager.hpp, bandwidth_manager.cpp).

@@ -1,12 +1,12 @@
 package io.github.yuroyami.kitetorrent
 
 /**
- * A bitfield of arbitrary length — pure-Kotlin port of libtorrent's `bitfield`
- * (bitfield.hpp). Tracks which pieces a peer has / which we have.
+ * A bitfield of arbitrary length. This is a pure-Kotlin port of libtorrent's
+ * `bitfield` (bitfield.hpp). It tracks which pieces a peer has, and which we have.
  *
  * Stored MSB-first within each byte (bit 0 is `0x80` of byte 0), which is exactly
- * the on-the-wire layout of the BitTorrent `bitfield` message — so [data] can be
- * sent and [assign] can ingest a received bitfield with no reshuffling. libtorrent
+ * the on-the-wire layout of the BitTorrent `bitfield` message. [data] can therefore be
+ * sent, and [assign] can read a received bitfield, with no reordering. libtorrent
  * reaches the same layout via network-byte-order 32-bit words; a byte array is the
  * simpler equivalent on the JVM/Native/JS, where we have no raw-pointer aliasing.
  */

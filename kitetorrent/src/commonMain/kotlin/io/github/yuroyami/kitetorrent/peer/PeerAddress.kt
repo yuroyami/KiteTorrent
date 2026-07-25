@@ -1,19 +1,19 @@
 package io.github.yuroyami.kitetorrent.peer
 
 /**
- * A parsed IP address — the pure-Kotlin stand-in for libtorrent's
+ * A parsed IP address: the pure-Kotlin stand-in for libtorrent's
  * `libtorrent::address` (Boost.Asio) inside the peer-list port.
  *
  * KiteTorrent v0 deliberately keeps a peer's address as a host **string** (see
  * [TorrentPeer.host]); there are no socket types in `commonMain`. But several
- * faithful behaviours — BEP 40 peer priority ([peerPriority]), local-address
- * preference ([isLocal]), IPv6 link-local rejection, and the canonical address
- * ordering used to keep the peer list sorted — genuinely need the address in its
- * numeric, network-byte-order form. [PeerAddress] provides exactly that: it
+ * faithful behaviours genuinely need the address in its numeric, network-byte-order
+ * form: BEP 40 peer priority ([peerPriority]), local-address preference
+ * ([isLocal]), IPv6 link-local rejection, and the canonical address ordering that
+ * keeps the peer list sorted. [PeerAddress] provides exactly that: it
  * parses a dotted-quad / colon-hex literal into its raw bytes and exposes the
  * predicates those behaviours require, and nothing more.
  *
- * Only numeric literals are understood (this layer never resolves DNS — that is
+ * This class understands only numeric literals (it never resolves DNS, which is
  * a platform concern). [parseOrNull] returns `null` for anything it cannot parse
  * as a literal IPv4 or IPv6 address, and callers treat such hosts as opaque.
  *
@@ -29,14 +29,14 @@ class PeerAddress private constructor(val bytes: ByteArray) : Comparable<PeerAdd
     val isV6: Boolean get() = bytes.size == 16
 
     /**
-     * True for the "unspecified" / any address (`0.0.0.0` or `::`) — the analogue
-     * of comparing against a default-constructed `address`. libtorrent's
+     * True for the "unspecified" / any address (`0.0.0.0` or `::`). This is the
+     * analogue of comparing against a default-constructed `address`. libtorrent's
      * `add_peer` ignores such endpoints.
      */
     val isUnspecified: Boolean get() = isAllZero(0, bytes.size)
 
     /**
-     * True for an IPv6 link-local address (`fe80::/10`) — the port of
+     * True for an IPv6 link-local address (`fe80::/10`): the port of
      * `address_v6::is_link_local`. libtorrent refuses to add such peers in
      * `peer_list::add_peer` because they require a scope/interface to be usable.
      * Always false for IPv4.

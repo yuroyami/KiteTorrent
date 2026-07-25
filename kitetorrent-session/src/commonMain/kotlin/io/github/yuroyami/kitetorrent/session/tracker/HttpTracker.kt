@@ -15,7 +15,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 
 /**
- * HTTP(S) tracker client — the network half of libtorrent's
+ * HTTP(S) tracker client, the network half of libtorrent's
  * `http_tracker_connection`. All the protocol logic (building the announce URL with
  * percent-encoded binary info-hash/peer-id, parsing the bencoded response incl.
  * BEP-23 compact peers) lives in the pure, tested [HttpTrackerCodec]; this class is
@@ -34,12 +34,12 @@ class HttpTracker(
      */
     private val maxResponseBytes: Int = DEFAULT_MAX_RESPONSE_BYTES,
     /**
-     * When set, plain `http://` tracker requests are tunnelled through [NetworkRuntime.proxy] (the
+     * When set, plain `http://` tracker requests travel through [NetworkRuntime.proxy] (the
      * proxy negotiation lives in [connectTcp], so SOCKS5/SOCKS4/HTTP all work) instead of going out
-     * on the injected [client] directly — the port of libtorrent routing `http_tracker_connection`'s
-     * `http_connection` through the proxy. Null (or no proxy configured) leaves the direct
-     * [client] path byte-identical. `https://` always uses [client] (TLS can't run over the raw
-     * tunnel here), matching the lowest-risk wiring.
+     * on the injected [client] directly. This is the port of libtorrent routing
+     * `http_tracker_connection`'s `http_connection` through the proxy. Null (or no proxy
+     * configured) leaves the direct [client] path byte-identical. `https://` always uses [client]
+     * (TLS can't run over the raw tunnel here), matching the lowest-risk wiring.
      */
     private val network: NetworkRuntime? = null,
 ) {
@@ -207,9 +207,9 @@ class HttpTracker(
                 if (out.size > maxResponseBytes) throw TorrentException(LibtorrentError.PACKET_TOO_LARGE)
             }
         } catch (e: TorrentException) {
-            throw e // a PACKET_TOO_LARGE we raised — propagate it, don't swallow as EOF
+            throw e // a PACKET_TOO_LARGE we raised: propagate it, don't swallow as EOF
         } catch (_: Throwable) {
-            // EOF: the peer closed the stream — the body is complete.
+            // EOF: the peer closed the stream. The body is complete.
         }
         return out.toByteArray()
     }

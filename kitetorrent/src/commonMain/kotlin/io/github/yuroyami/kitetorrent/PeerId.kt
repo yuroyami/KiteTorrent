@@ -3,12 +3,12 @@ package io.github.yuroyami.kitetorrent
 import kotlin.random.Random
 
 /**
- * A 20-byte BitTorrent peer id — the pure-Kotlin port of libtorrent's
+ * A 20-byte BitTorrent peer id. This is the pure-Kotlin port of libtorrent's
  * `using peer_id = sha1_hash;` (peer_id.hpp). Structurally it is just a
  * 20-byte digest, so it aliases [Sha1Hash] exactly as upstream aliases
  * `sha1_hash`.
  *
- * A peer id is constructed (not hashed) — the leading bytes carry the client
+ * A peer id is constructed, not hashed. The leading bytes carry the client
  * [fingerprint][generateFingerprint] (e.g. `"-KT0010-"`) and the remaining bytes
  * are random, so each session announces a stable client signature plus a unique
  * per-session tail.
@@ -20,7 +20,7 @@ const val PEER_ID_SIZE: Int = Digest32.SHA1_SIZE
 
 /**
  * The URL-safe printable character set libtorrent uses to fill the random tail
- * of a peer id — the port of the `printable[]` table in `url_random`
+ * of a peer id. This is the port of the `printable[]` table in `url_random`
  * (src/string_util.cpp).
  *
  * These are "http-accepted characters, excluding `'` since some buggy trackers
@@ -51,7 +51,7 @@ private fun urlRandom(dest: ByteArray, fromIndex: Int, random: Random) {
 
 /**
  * Generate a 20-byte peer id whose leading bytes are the client [fingerprint]
- * and whose remaining bytes are URL-safe random characters — the port of
+ * and whose remaining bytes are URL-safe random characters. This is the port of
  * `aux::generate_peer_id(session_settings const&)`
  * (src/generate_peer_id.cpp).
  *
@@ -62,7 +62,7 @@ private fun urlRandom(dest: ByteArray, fromIndex: Int, random: Random) {
  *  4. fill whatever remains with `url_random`.
  *
  * The fingerprint is encoded as ASCII (it is `'-'`, two tag chars and four
- * base-36 version chars — all single-byte). Each fingerprint character occupies
+ * base-36 version chars, all single-byte). Each fingerprint character occupies
  * exactly one id byte.
  *
  * @param fingerprint the client prefix, defaulting to KiteTorrent's
@@ -93,7 +93,7 @@ fun generatePeerId(
 /**
  * Deterministic peer-id construction: place the [fingerprint] at the front and
  * use the caller-supplied [randomTail] for the remaining bytes verbatim. This is
- * the testable counterpart of [generatePeerId] — no RNG is consulted.
+ * the testable counterpart of [generatePeerId]. It consults no random number generator.
  *
  * The [randomTail] must be exactly the number of bytes left after the (possibly
  * truncated) fingerprint, i.e. `20 - min(fingerprint.length, 20)`, so that the

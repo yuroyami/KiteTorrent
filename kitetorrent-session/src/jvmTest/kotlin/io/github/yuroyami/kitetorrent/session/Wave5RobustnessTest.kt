@@ -18,7 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Wave 5: verified resume (recheck only claims hash-valid pieces) + the state machine. */
+/** Verified resume: a recheck claims only hash-valid pieces, and drives the state machine. */
 class Wave5RobustnessTest {
 
     private val pieceLength = 32 * 1024

@@ -5,7 +5,7 @@ import io.github.yuroyami.kitetorrent.Sha256Hash
 import io.github.yuroyami.kitetorrent.bencode.BdecodeNode
 
 /**
- * The add-a-torrent payload produced by [LoadTorrent] — the pure-Kotlin analogue of the
+ * The add-a-torrent payload produced by [LoadTorrent]. This is the pure-Kotlin analogue of the
  * fields libtorrent's `load_torrent_*` functions populate in an `add_torrent_params`
  * (src/load_torrent.cpp, `update_atp`).
  *
@@ -22,7 +22,7 @@ import io.github.yuroyami.kitetorrent.bencode.BdecodeNode
  *  - [infoHashes] convenience pair ← `ti->info_hashes()`.
  *
  * Per-file merkle tree reconstruction and piece-layer verification (the second half of
- * `update_atp`) are **not** reproduced here — see the note in [LoadTorrent].
+ * `update_atp`) are **not** reproduced here. See the note in [LoadTorrent].
  */
 class AddTorrentParams internal constructor(
     /** The parsed torrent metadata. */
@@ -49,7 +49,7 @@ class AddTorrentParams internal constructor(
 
 /**
  * Thin loaders that turn raw `.torrent` bytes (or an already-decoded node) into a parsed
- * torrent — the pure-Kotlin port of libtorrent's src/load_torrent.cpp
+ * torrent. This is the pure-Kotlin port of libtorrent's src/load_torrent.cpp
  * (`load_torrent_buffer` / `load_torrent_parsed`, and the `update_atp` drain step).
  *
  * libtorrent's loaders are deliberately thin wrappers around the `torrent_info`
@@ -72,7 +72,7 @@ object LoadTorrent {
 
     /**
      * Parse a `.torrent` file from its raw bencoded [buffer] into a [TorrentInfo].
-     * Equivalent to libtorrent constructing a `torrent_info` from a buffer — i.e. the
+     * Equivalent to libtorrent constructing a `torrent_info` from a buffer, which is the
      * core of `load_torrent_buffer` minus the session-level drain. Identical to
      * [TorrentInfo.parse]; provided under the load_torrent name for parity with the C++
      * API surface.
@@ -101,8 +101,8 @@ object LoadTorrent {
      *
      * [TorrentInfo] already exposes trackers as a list of tiers (each inner list a tier);
      * here they are flattened to the parallel `(url, tier)` representation libtorrent's
-     * `add_torrent_params` uses — tier index = the position of the inner list, exactly as
-     * `torrent_info`'s announce parsing assigns it.
+     * `add_torrent_params` uses. The tier index is the position of the inner list, exactly
+     * as `torrent_info`'s announce parsing assigns it.
      */
     private fun updateAtp(ti: TorrentInfo): AddTorrentParams {
         val trackers = ArrayList<String>()

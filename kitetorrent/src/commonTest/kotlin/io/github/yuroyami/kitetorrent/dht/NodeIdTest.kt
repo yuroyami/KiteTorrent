@@ -10,7 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Tests for [io.github.yuroyami.kitetorrent.dht] node-id helpers — the port of
+ * Tests for [io.github.yuroyami.kitetorrent.dht] node-id helpers, the port of
  * `src/kademlia/node_id.cpp`.
  *
  * The BEP 42 golden vectors are the canonical ones published in the spec and

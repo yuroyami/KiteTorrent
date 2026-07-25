@@ -9,10 +9,10 @@ import io.github.yuroyami.kitetorrent.crypto.Hasher
 import io.github.yuroyami.kitetorrent.crypto.Hasher256
 
 /**
- * A parsed `.torrent` file — the pure-Kotlin counterpart of libtorrent's
+ * A parsed `.torrent` file. This is the pure-Kotlin counterpart of libtorrent's
  * `torrent_info` (torrent_info.cpp). Built from the bencoded bytes of a torrent, it
  * exposes the metadata a client needs: the name, the file list, piece geometry, the
- * trackers, and — crucially — the info-hash(es).
+ * trackers, and the info-hash or hashes.
  *
  * The **info-hash** is `SHA-1(info-dict)` for v1 (BEP 3) and `SHA-256(info-dict)`
  * for v2 (BEP 52); a hybrid torrent has both. Because [BdecodeNode.dataSection]
@@ -20,8 +20,9 @@ import io.github.yuroyami.kitetorrent.crypto.Hasher256
  * over the original bytes and is byte-for-byte identical to every other client's.
  *
  * v1 (and the v1 side of hybrid torrents) is fully parsed. Pure-v2 file trees are
- * parsed for their file list and per-file merkle roots; full piece-layer / merkle
- * verification is a follow-up.
+ * parsed for their file list and per-file merkle roots. This class does not fold the
+ * `piece layers` back to each file's root, so it accepts a `.torrent` whose piece
+ * layers disagree with its file tree.
  */
 class TorrentInfo private constructor(
     /** The files and piece geometry. */
@@ -46,14 +47,14 @@ class TorrentInfo private constructor(
     val createdBy: String?,
     /** Creation time as a Unix timestamp (seconds), or null. */
     val creationDate: Long?,
-    /** The exact bytes of the `info` dictionary — the info-hash preimage, and what
-     *  `ut_metadata` serves to magnet peers. */
+    /** The exact bytes of the `info` dictionary. This is the info-hash preimage, and
+     *  what `ut_metadata` serves to magnet peers. */
     val infoBytes: ByteArray,
     /**
      * BEP-52 top-level `piece layers`: each file's merkle root → the SHA-256 hash of every
      * one of its pieces (the merkle layer at piece granularity). Present only for v2 files
      * larger than a single piece. This is the verification anchor for a v2 download from a
-     * `.torrent` — no `hash_request` round-trip needed.
+     * `.torrent`, so no `hash_request` exchange is needed.
      */
     private val pieceLayers: Map<Sha256Hash, List<Sha256Hash>>,
 ) {
@@ -77,9 +78,10 @@ class TorrentInfo private constructor(
     }
 
     /**
-     * The v2 piece hash (the merkle root of piece [index]'s 16 KiB block leaves) — the
-     * verification target for a v2 download. Comes from the `piece layers`, except a file
-     * that fits in a single piece, where the file's own merkle root is the piece hash.
+     * The v2 piece hash: the merkle root of piece [index]'s 16 KiB block leaves. This is
+     * the verification target for a v2 download. It comes from the `piece layers`, except
+     * for a file that fits in a single piece, where the file's own merkle root is the
+     * piece hash.
      *
      * Single-file: index directly into the file's piece-layer row (or the file root for a
      * one-piece file).
@@ -119,7 +121,7 @@ class TorrentInfo private constructor(
 
     /**
      * For a v2 / hybrid torrent, checks the BEP-52 layout invariant that every file (except
-     * the last) begins on a piece boundary — pad files in a hybrid v1 list, and the v2 file
+     * the last) begins on a piece boundary. Pad files in a hybrid v1 list, and the v2 file
      * tree's natural per-file trees, are supposed to enforce this. Returns true for v1-only
      * torrents (the invariant does not apply) and for an empty/degenerate layout.
      *
@@ -134,7 +136,7 @@ class TorrentInfo private constructor(
         for (i in files.indices) {
             val f = files[i]
             // ordering: offsets must be non-decreasing (and contiguous, since offset is
-            // the running sum of sizes — a regression means the file list is inconsistent).
+            // the running sum of sizes, so a decrease means the file list is inconsistent).
             if (f.offset < prevOffset) return false
             prevOffset = f.offset
             // every file except the last must start on a piece boundary.
@@ -159,7 +161,7 @@ class TorrentInfo private constructor(
     fun infoHashHex(): String = (infoHashV2 ?: infoHashV1)?.toHex() ?: ""
 
     /**
-     * The announce tiers (BEP-12), preserved — each inner list is one tier, tried in order.
+     * The announce tiers (BEP-12), preserved: each inner list is one tier, tried in order.
      * This is the same backing data as [trackers]; exposed under the libtorrent-aligned name
      * to make the tier structure explicit and to discourage flattening at parse time.
      */
@@ -220,7 +222,7 @@ class TorrentInfo private constructor(
         }
 
         /**
-         * Parse the BEP-52 top-level `piece layers` dict — `{ file-root(32B) →
+         * Parse the BEP-52 top-level `piece layers` dict, of the form `{ file-root(32B) →
          * concatenated 32-byte piece hashes }`. Absent for v1 torrents and for v2 files
          * that fit in a single piece.
          */

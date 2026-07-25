@@ -18,9 +18,9 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * uTP fast-retransmit proof. The sender's RTO floor is set to 5 s, but a dropped data
- * packet is recovered and the whole transfer finishes in well under 3 s. That gap can
- * only close via SACK / duplicate-ACK fast retransmit — the RTO timer demonstrably had
+ * uTP fast-retransmit proof. The sender's RTO floor is set to 5 s, yet it recovers a
+ * dropped data packet and finishes the whole transfer in well under 3 s. That gap can
+ * only close via SACK / duplicate-ACK fast retransmit. The RTO timer demonstrably had
  * not fired yet. Distinguishes fast-resend from the slower RTO path ([UtpRetransmitTest]).
  */
 class UtpFastResendTest {

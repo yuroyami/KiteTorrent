@@ -7,16 +7,16 @@ import io.github.yuroyami.kitetorrent.protocol.PeerMessage
 import kotlinx.coroutines.CancellationException
 
 /**
- * One BitTorrent peer session over a single byte-duplex — the coroutine port of
- * libtorrent's `peer_connection` / `bt_peer_connection` (src/peer_connection.cpp,
- * src/bt_peer_connection.cpp), the heart of the wire engine.
+ * One BitTorrent peer session over a single byte-duplex. This is the coroutine port
+ * of libtorrent's `peer_connection` and `bt_peer_connection` (src/peer_connection.cpp,
+ * src/bt_peer_connection.cpp). It drives the wire protocol for one peer.
  *
  * libtorrent drives this connection through Boost.Asio completion callbacks
  * (`on_receive`, `on_send`) feeding a hand-rolled receive-buffer state machine
  * (`m_recv_buffer`, `state_t`). Here the same protocol *logic* runs as straight-line
  * suspending code: [performHandshake] suspends on the 68-byte exchange, then
- * [receiveLoop] frames and decodes messages one at a time. There is no callback
- * soup and no explicit `state_t` enum — the suspension points *are* the states.
+ * [receiveLoop] frames and decodes messages one at a time. There are no callbacks
+ * and no explicit `state_t` enum. The suspension points *are* the states.
  *
  * Scope. This class owns the parts of `peer_connection` that are *per-connection and
  * local*: the handshake, message framing/decoding, the four choke/interest flags
@@ -49,7 +49,7 @@ class PeerConnection(
     /**
      * Whether *our* torrent carries BitTorrent-v2 metadata. When true we set the
      * BEP-52 v2-upgrade bit (`reserved[7] |= 0x10`) in our outgoing handshake,
-     * advertising willingness to upgrade — exactly libtorrent's
+     * advertising willingness to upgrade. This matches libtorrent's
      * `!protocol_v2 && info_hash.has_v2()` condition in `write_handshake()`.
      * Defaults to `false` so existing call sites keep emitting the prior wire bytes.
      */
@@ -122,7 +122,7 @@ class PeerConnection(
     val theirBitfield: Bitfield get() = state.theirBitfield
 
     // ============================================================================
-    // Handshake — bt_peer_connection::write_handshake + the read_info_hash /
+    // Handshake: bt_peer_connection::write_handshake plus the read_info_hash and
     // read_peer_id states of bt_peer_connection::on_receive.
     // ============================================================================
 
@@ -150,20 +150,20 @@ class PeerConnection(
     suspend fun performHandshake(): HandshakeResult {
         require(!infoHash.isAllZeros()) { "cannot handshake on an all-zero info-hash" }
 
-        // 1. write our handshake (write_handshake) — [ourReserved] advertises DHT +
+        // 1. write our handshake (write_handshake). [ourReserved] advertises DHT +
         //    Fast + extension protocol (always honoured) plus the BEP-52 v2-upgrade bit
         //    when our torrent has v2 metadata, exactly as libtorrent's write_handshake().
         conn.write(Handshake.encode(infoHash, ourPeerId, ourReserved))
 
         // 2. read exactly the 68 fixed bytes (read_info_hash: 28 bytes, then
-        //    read_peer_id: 20 bytes — we pull the whole frame in one shot).
+        //    read_peer_id: 20 bytes). We read the whole frame in one call.
         val raw = conn.readExactly(Handshake.LENGTH)
 
         // 3. parse + validate the protocol identifier (recv_handshake).
         val hs = Handshake.decode(raw)
             ?: throw HandshakeException("peer is not speaking the BitTorrent protocol")
 
-        // 4. info-hash check — errors::invalid_info_hash on mismatch.
+        // 4. info-hash check: errors::invalid_info_hash on mismatch.
         if (hs.infoHash != infoHash) {
             throw HandshakeException(
                 "info-hash mismatch: peer offered ${hs.infoHash.toHex()}, expected ${infoHash.toHex()}",
@@ -185,18 +185,18 @@ class PeerConnection(
     }
 
     /**
-     * True iff the remote peer's id equals [ourPeerId] — a self-connect. libtorrent
+     * True iff the remote peer's id equals [ourPeerId], which means a self-connect. libtorrent
      * rejects these (`pid == m_our_peer_id` ⇒ `errors::self_connection`). Returns
      * `false` until a handshake has populated [remotePeerId].
      */
     val isSelfConnect: Boolean get() = remotePeerId == ourPeerId
 
     /**
-     * Mark this connection [disconnected] so any subsequent `send*` call fails fast
-     * with [ProtocolException] instead of writing onto a stream the orchestrator is
-     * about to tear down. Idempotent and safe to call from the orchestrator on a
-     * self-connect, a duplicate peer-id, or a protocol error — the analogue of
-     * libtorrent's `disconnect(...)` decision point.
+     * Mark this connection [disconnected] so any subsequent `send*` call fails
+     * immediately with [ProtocolException] instead of writing onto a stream the
+     * orchestrator is about to close. Idempotent and safe to call from the
+     * orchestrator on a self-connect, a duplicate peer-id, or a protocol error.
+     * This is the analogue of libtorrent's `disconnect(...)` decision point.
      *
      * The underlying byte-stream/socket is owned by the orchestrator (it constructed
      * the [TcpConnection]); closing it stays the orchestrator's responsibility, which
@@ -231,15 +231,15 @@ class PeerConnection(
     }
 
     // ============================================================================
-    // Receive loop — the framing half of bt_peer_connection::on_receive +
+    // Receive loop: the framing half of bt_peer_connection::on_receive plus
     // dispatch_message, driven by suspension instead of m_recv_buffer.
     // ============================================================================
 
     /**
      * Read and dispatch peer-wire messages until the stream closes (or the coroutine
      * is cancelled). Ports the post-handshake framing of `on_receive`: read the
-     * 4-byte big-endian length prefix, then the body, then decode and dispatch — the
-     * suspending equivalent of libtorrent waiting for `packet_size` bytes in
+     * 4-byte big-endian length prefix, then the body, then decode and dispatch. This
+     * is the suspending equivalent of libtorrent waiting for `packet_size` bytes in
      * `m_recv_buffer` before calling `dispatch_message`.
      *
      * Framing is done here directly off [ByteStream.readExactly] rather than through
@@ -262,8 +262,8 @@ class PeerConnection(
      *    (`incoming_have_all` / `incoming_have_none`).
      *
      * Everything else (requests we receive, blocks we receive, cancels, fast-extension
-     * hints, the extended protocol) is decoded and forwarded *without* side effects —
-     * those drive disk/picker policy that lives in the orchestrator. [onMessage] is
+     * hints, the extended protocol) is decoded and forwarded *without* side effects.
+     * Those drive disk and picker policy, which lives in the orchestrator. [onMessage] is
      * invoked for *every* decoded message, including the state-changing ones, so the
      * orchestrator can react (e.g. pick blocks on unchoke).
      *
@@ -309,7 +309,7 @@ class PeerConnection(
     /**
      * Like [receiveLoop] but swallows the end-of-stream / cancellation exception so a
      * normal peer disconnect returns instead of throwing. Protocol violations
-     * ([ProtocolException], [BadFrameLengthException]) still propagate — a peer that
+     * ([ProtocolException], [BadFrameLengthException]) still propagate. A peer that
      * breaks framing must be disconnected, which libtorrent does the same way.
      */
     suspend fun receiveLoopCatching(
@@ -334,9 +334,9 @@ class PeerConnection(
     }
 
     /**
-     * Apply the local state mutations a received message implies — the flag flips and
+     * Apply the local state mutations a received message implies: the flag flips and
      * availability bookkeeping from the various `incoming_*` handlers, minus the
-     * picker/disk side effects that the orchestrator owns.
+     * picker and disk side effects that the orchestrator owns.
      */
     private fun applyIncoming(msg: PeerMessage) {
         when (msg) {
@@ -366,11 +366,11 @@ class PeerConnection(
     }
 
     /**
-     * Ingest a received `bitfield` — `incoming_bitfield` / `on_bitfield`. The wire
-     * payload must be exactly `ceil(numPieces / 8)` bytes (libtorrent:
+     * Ingest a received `bitfield`, the port of `incoming_bitfield` and `on_bitfield`.
+     * The wire payload must be exactly `ceil(numPieces / 8)` bytes (libtorrent:
      * `packet_size - 1 != (num_pieces + 7) / 8` ⇒ `invalid_bitfield_size`). The
      * decoded [Bitfield] is sized to `payloadBytes * 8`, so we check the byte count,
-     * then copy the first [numPieces] bits — trailing pad bits are ignored.
+     * then copy the first [numPieces] bits. Trailing pad bits are ignored.
      */
     private fun applyBitfield(bits: Bitfield) {
         // During a metadata-only connection (magnet, before we know the piece count) the
@@ -407,7 +407,7 @@ class PeerConnection(
     }
 
     // ============================================================================
-    // Outgoing message helpers — one per write_* sender in bt_peer_connection.cpp.
+    // Outgoing message helpers: one per write_* sender in bt_peer_connection.cpp.
     // Each encodes via PeerMessage and writes the full frame; the ones that change
     // our advertised state also flip the matching flag, like the C++ senders do.
     // ============================================================================
@@ -457,13 +457,13 @@ class PeerConnection(
         conn.write(PeerMessage.Bitfield(bitfield).encode())
     }
 
-    /** Send `have_all` (BEP-6, `write_have_all`) — used in place of a full bitfield when seeding. */
+    /** Send `have_all` (BEP-6, `write_have_all`). It replaces a full bitfield when seeding. */
     suspend fun sendHaveAll() {
         ensureWritable()
         conn.write(PeerMessage.HaveAll.encode())
     }
 
-    /** Send `have_none` (BEP-6, `write_have_none`) — used in place of an empty bitfield. */
+    /** Send `have_none` (BEP-6, `write_have_none`). It replaces an empty bitfield. */
     suspend fun sendHaveNone() {
         ensureWritable()
         conn.write(PeerMessage.HaveNone.encode())
@@ -482,7 +482,7 @@ class PeerConnection(
     }
 
     /**
-     * Send a `piece` block — [block] bytes at [begin] within [piece] (`write_piece`).
+     * Send a `piece` block: [block] bytes at [begin] within [piece] (`write_piece`).
      * The orchestrator reads the block from disk and calls this when honouring a
      * request from an unchoked, interested peer.
      */
@@ -491,7 +491,7 @@ class PeerConnection(
         conn.write(PeerMessage.Piece(piece, begin, block).encode())
     }
 
-    /** Send `reject_request` (BEP-6, `write_reject_request`) — refuse a request we won't serve. */
+    /** Send `reject_request` (BEP-6, `write_reject_request`) to refuse a request we will not serve. */
     suspend fun sendRejectRequest(piece: Int, begin: Int, length: Int) {
         ensureWritable()
         conn.write(PeerMessage.RejectRequest(piece, begin, length).encode())
@@ -519,19 +519,19 @@ class PeerConnection(
         conn.write(PeerMessage.Extended(extId, payload).encode())
     }
 
-    /** Send `hash_request` (id 21, BEP-52) — ask for merkle hashes (`write_hash_request`). */
+    /** Send `hash_request` (id 21, BEP-52) to ask for merkle hashes (`write_hash_request`). */
     suspend fun sendHashRequest(msg: PeerMessage.HashRequest) {
         ensureWritable()
         conn.write(msg.encode())
     }
 
-    /** Send `hashes` (id 22, BEP-52) — the merkle hashes answering a request (`write_hashes`). */
+    /** Send `hashes` (id 22, BEP-52): the merkle hashes answering a request (`write_hashes`). */
     suspend fun sendHashes(msg: PeerMessage.Hashes) {
         ensureWritable()
         conn.write(msg.encode())
     }
 
-    /** Send `hash_reject` (id 23, BEP-52) — decline a `hash_request` (`write_hash_reject`). */
+    /** Send `hash_reject` (id 23, BEP-52) to decline a `hash_request` (`write_hash_reject`). */
     suspend fun sendHashReject(msg: PeerMessage.HashReject) {
         ensureWritable()
         conn.write(msg.encode())
@@ -576,22 +576,22 @@ class HandshakeResult(
 
 /**
  * Thrown by [PeerConnection.performHandshake] when the peer is not speaking
- * BitTorrent or offers the wrong info-hash — the conditions libtorrent turns into an
- * `errors::invalid_info_hash` disconnect.
+ * BitTorrent or offers the wrong info-hash. libtorrent turns the same conditions into
+ * an `errors::invalid_info_hash` disconnect.
  */
 class HandshakeException(message: String) : RuntimeException(message)
 
 /**
  * Thrown by [PeerConnection.receiveLoop] when a peer violates the wire protocol
- * (e.g. a wrong-sized bitfield, or an oversized frame) — the family of
- * `peer_error` disconnects in libtorrent. The connection must be closed.
+ * (for example a wrong-sized bitfield, or an oversized frame). These match the family
+ * of `peer_error` disconnects in libtorrent. The connection must be closed.
  */
 class ProtocolException(message: String) : RuntimeException(message)
 
 /**
  * Thrown by [PeerConnection.receiveLoop] when a peer announces a frame longer than
- * an addressable [ByteArray] (> `Int.MAX_VALUE`) — certainly malformed/hostile.
- * Distinct from [ProtocolException] so callers can log the offending length.
+ * an addressable [ByteArray] (> `Int.MAX_VALUE`). Such a frame is malformed or hostile.
+ * It is distinct from [ProtocolException] so callers can log the offending length.
  */
 class BadFrameLengthException(val declaredLength: Long) :
     RuntimeException("peer announced frame length $declaredLength (exceeds Int.MAX_VALUE)")

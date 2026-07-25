@@ -1,6 +1,6 @@
 # Seeding
 
-Seeding is two jobs. First you turn a set of files into a `.torrent` so the rest of the swarm knows what to ask for. Then you serve the data you already have to peers who want it. This page covers both: building a torrent with `CreateTorrent` (byte-identical to libtorrent), the upload path through `TorrentSession`, web seeds, and how to get the v1/v2/hybrid info-hash right.
+Seeding is two jobs. First you turn a set of files into a `.torrent` so the rest of the swarm knows what to ask for. Then you serve the data you already have to peers who want it. This page covers both: building a torrent with `CreateTorrent`, the upload path through `TorrentSession`, web seeds, and how to get the v1/v2/hybrid info-hash right.
 
 If you only want to download, see [Downloading](downloading.md). If you are starting from a magnet link, see [Magnets](magnets.md).
 
@@ -11,11 +11,11 @@ A `.torrent` file is a bencoded dictionary: the file list and piece geometry in 
 `CreateTorrent` builds that structure in pure common code. It lives in the core module, so you can construct a torrent on any target the core supports (Android, iOS, JVM, JS).
 
 !!! note "Hashing is the caller's job"
-    `CreateTorrent` deliberately does not read files off disk. The core has no filesystem in `commonMain`, so it never pretends to have one. You read and hash the bytes yourself (with [`Hasher`](core-toolkit.md) for v1 and [`Hasher256`](core-toolkit.md) for v2), then feed the hashes in. This mirrors libtorrent's `set_piece_hashes()` helper exactly.
+    `CreateTorrent` deliberately does not read files from disk. The core has no filesystem in `commonMain`, so it never pretends to have one. You read and hash the bytes yourself, with [`Hasher`](core-toolkit.md) for v1 and [`Hasher256`](core-toolkit.md) for v2, then feed the hashes in.
 
 ### The four steps
 
-libtorrent creates a torrent in four steps, and `CreateTorrent` follows the same order:
+`CreateTorrent` builds a torrent in four steps, in this order:
 
 1. Describe the files and piece geometry.
 2. Set torrent properties: trackers, web seeds, DHT nodes, comment.
@@ -56,14 +56,14 @@ for (index in 0 until numPieces) {
 val torrentBytes: ByteArray = creator.generateBuffer()
 ```
 
-`generateBuffer()` is just `Bencode.encode(generate())`. If you want to add custom keys before encoding, call `generate()` to get the `Entry` tree, mutate it, then encode it yourself.
+`generateBuffer()` is just `Bencode.encode(generate())`. If you want to add custom keys before encoding, call `generate()` to get the `Entry` tree, mutate it, then encode it yourself. For the same input, the bytes are identical to libtorrent's `create_torrent` output.
 
 !!! tip "Round-trip to verify"
-    Parse what you just produced: `TorrentInfo.parse(torrentBytes)`. The resulting `infoHashV1`, file list and piece count should match what you fed in. This is the cheapest possible smoke test for a generated torrent.
+    Parse what you just produced: `TorrentInfo.parse(torrentBytes)`. The resulting `infoHashV1`, file list and piece count should match what you fed in. This is the cheapest possible check on a generated torrent.
 
 ### A multi-file torrent
 
-Add more than one file. Paths are relative to the torrent root; the builder stores them as `name/<relative path>` so they round-trip through `TorrentInfo`. The leading root component is dropped in the generated `files[]` list, exactly like libtorrent.
+Add more than one file. Paths are relative to the torrent root. The builder stores them as `name/<relative path>` so they round-trip through `TorrentInfo`. The leading root component is dropped in the generated `files[]` list.
 
 ```kotlin
 val creator = CreateTorrent.Builder(name = "my-release", pieceLength = 512 * 1024)
@@ -92,7 +92,7 @@ All setters are fluent and return the `CreateTorrent`, so you can chain them.
 | `addSimilarTorrent(infoHash)` / `addCollection(name)` | BEP-38 cross-seeding hints. |
 
 !!! note "No clock in the core"
-    libtorrent stamps `creation date` with the wall clock at construction. The core has no clock, so KiteTorrent omits the field by default. Set it explicitly with `setCreationDate(...)` if you want it, passing a POSIX timestamp in seconds.
+    The core has no clock, so KiteTorrent leaves the `creation date` field out by default. Set it yourself with `setCreationDate(...)` if you want it, passing a POSIX timestamp in seconds.
 
 ## v1, v2 and hybrid
 
@@ -135,10 +135,10 @@ The flavour of the torrent you produce is decided by which hashes you set and th
     val bytes = creator.generateBuffer()
     ```
 
-The rule `generate()` enforces matches `validate_v1_hashes` / `validate_v2_hashes` in libtorrent: a flavour is produced only when **every** hash for that flavour is set. An all-zero hash is the "unset" sentinel and never counts. If neither a complete v1 set nor a complete v2 set is present, `generate()` throws.
+`generate()` enforces one rule: it produces a flavour only when **every** hash for that flavour is set. An all-zero hash is the "unset" sentinel and never counts. If neither a complete v1 set nor a complete v2 set is present, `generate()` throws.
 
 !!! warning "Use `Hasher256`, not the wrong granularity"
-    v1 hashes one SHA-1 per *piece*. v2 hashes one SHA-256 per 16 KiB *block*, and the per-piece and per-file merkle roots are computed for you. Mixing those up is the classic way to produce a torrent whose info-hash nobody else agrees with. When in doubt, parse the output back and compare `infoHashV1` / `infoHashV2` against a reference client.
+    v1 hashes one SHA-1 per *piece*. v2 hashes one SHA-256 per 16 KiB *block*, and the per-piece and per-file merkle roots are computed for you. If you mix the two up, you produce a torrent whose info-hash no other client agrees with. If you are unsure, parse the output back and compare `infoHashV1` and `infoHashV2` against a reference client.
 
 After parsing, `TorrentInfo` tells you what you got: `isV1`, `isV2`, `isHybrid`, plus `infoHashV1` and `infoHashV2`. `wireInfoHash()` gives the 20-byte hash used on the wire and at the tracker (the v1 hash when present, otherwise the truncated v2 hash).
 
@@ -186,7 +186,7 @@ session.recheck(full = true)
     session.recheck(full = true)   // FileDiskIo reports nothing present without this
     ```
 
-    With `full = true` the recheck hashes the bytes of every piece and claims only the ones whose hash matches the torrent, so a truncated or corrupted file is caught and those pieces are re-downloaded rather than served. `InMemoryDiskIo` does return a real present-map, so the default `full = false` behaves as described there.
+    With `full = true` the recheck hashes the bytes of every piece and claims only the ones whose hash matches the torrent. A truncated or corrupted file is therefore caught, and those pieces are downloaded again instead of being served. `InMemoryDiskIo` does return a real present-map, so the default `full = false` behaves as described there.
 
 To skip the rehash on a known-good copy, pass saved [resume data](downloading.md) instead of `null`. That path claims pieces from the stored bitfield without touching the disk.
 
@@ -196,8 +196,8 @@ Seeding peers go through the same `PeerConnection` machinery as downloading. Whe
 
 Three pieces of state govern who gets served:
 
-- **`uploadSlots`** (libtorrent's `max_uploads`) caps how many peers you upload to at once. Choked peers are not served.
-- **`maxPeers`** (`max_connections`) caps total connections for this torrent.
+- **`uploadSlots`** caps how many peers you upload to at once. Choked peers are not served. Its starting value comes from the `unchoke_slots_limit` setting.
+- **`maxPeers`** caps total connections for this torrent.
 - The **choker** runs a periodic round (`unchoke_interval`) and decides which interested peers fill the upload slots.
 
 ```kotlin
@@ -207,13 +207,13 @@ session.maxPeers = 80      // accept up to 80 connections for this torrent
 
 ### Tit-for-tat choking
 
-You cannot upload to everyone at once, so BitTorrent picks who to serve. KiteTorrent ports libtorrent's `choker.cpp` directly. Each choke round:
+You cannot upload to everyone at once, so BitTorrent picks who to serve. The rule is reciprocity: you serve the peers that serve you. The session runs a choke round on a timer, and each round:
 
 1. Ranks interested peers by their recent transfer rate.
 2. Unchokes the fastest peers up to `uploadSlots`.
-3. Reserves one rotating **optimistic** slot for a peer chosen at random, so newcomers get a chance to prove themselves and the swarm does not ossify.
+3. Reserves one rotating **optimistic** slot for a peer chosen at random, so a new peer gets a chance to show its speed.
 
-Everyone else stays choked. When you are seeding (you have nothing to download), "fastest" means the peers downloading from you fastest, which spreads your bandwidth toward the peers that propagate data best. The optimistic slot rotates on its own interval (`optimistic_unchoke_interval`).
+Every other peer stays choked. When you are seeding you have nothing to download, so "fastest" means the peers that download from you fastest. Your bandwidth then goes to the peers that spread the data best. The optimistic slot rotates on its own interval (`optimistic_unchoke_interval`).
 
 All of this is driven by `SettingsPack`. To change the cadence or slot count globally, see [Engine settings](engine-settings.md):
 
@@ -257,7 +257,7 @@ for (alert in engine.popAlerts()) {
 
 ## Web seeds (BEP-19)
 
-A web seed is a plain HTTP(S) server that hosts the torrent's files at predictable URLs. Downloaders can pull byte ranges over HTTP in addition to (or instead of) talking to peers, which is handy when the swarm is thin or you want a guaranteed source.
+A web seed is a plain HTTP or HTTPS server that hosts the torrent's files at predictable URLs. Downloaders can request byte ranges over HTTP as well as, or instead of, talking to peers. That helps when the swarm has few peers, or when you want one guaranteed source.
 
 You add web seeds when you **build** the torrent, with `addUrlSeed`. The URL goes into the torrent's `url-list`:
 
@@ -269,7 +269,7 @@ val creator = CreateTorrent.Builder("dataset.bin", pieceLength = 1 shl 20)
     .addTracker("udp://tracker.example.org:1337/announce")
 ```
 
-The URLs survive parsing: `TorrentInfo.parse(...).webSeeds` returns the list back. On the download side, the session treats each web seed as a "GetRight" style HTTP source, fetching the byte ranges that cover the pieces it needs, exactly as `web_peer_connection.cpp` does. No extra wiring is required; the engine consumes the torrent's `webSeeds` automatically when it downloads.
+The URLs survive parsing: `TorrentInfo.parse(...).webSeeds` returns the list back. On the download side, the session treats each web seed as a "GetRight" style HTTP source. It fetches the byte ranges that cover the pieces it needs. No extra wiring is required, because the engine reads the torrent's `webSeeds` automatically when it downloads.
 
 !!! note "Web seeds are a download source"
     There is nothing to "turn on" for serving via a web seed: the web seed *is* the HTTP server hosting your files. KiteTorrent's job is to let downloaders use it. You point `addUrlSeed` at wherever those files are reachable and host them with any ordinary HTTP server that supports range requests.

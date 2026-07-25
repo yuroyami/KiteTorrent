@@ -20,7 +20,7 @@ import kotlinx.io.files.SystemFileSystem
  * its byte range overlaps.
  *
  * Blocking file syscalls run on [dispatcher] (defaults to [Dispatchers.Default]; callers on
- * JVM/Android should inject `Dispatchers.IO` — it is not available in `commonMain`).
+ * JVM/Android should inject `Dispatchers.IO`, which is not available in `commonMain`).
  *
  * Concurrency: a shared [RandomAccessStorage] does an internal `seek` then `read`/
  * `write`, so two concurrent peers hitting the same file handle would interleave a
@@ -38,10 +38,10 @@ import kotlinx.io.files.SystemFileSystem
  * Allocation: [storageMode] chooses sparse files (the default) or full preallocation
  * (`ALLOCATE`), matching libtorrent's `storage_mode_t`.
  *
- * Resume note: [checkExistingFiles] currently reports nothing as present (a fresh
- * download). Verified resume — hashing the on-disk pieces against the torrent hashes —
- * is a small follow-up that belongs in the engine's recheck path, since the expected
- * hashes live there, not here.
+ * Resume note: [checkExistingFiles] always reports nothing as present, so every start
+ * looks like a fresh download. Verified resume hashes the on-disk pieces against the
+ * torrent hashes, and it runs in the engine's recheck path, where the expected hashes
+ * live.
  */
 class FileDiskIo(
     private val storage: FileStorage,
@@ -157,7 +157,7 @@ class FileDiskIo(
                     var done = 0
                     while (done < seg.len) {
                         val n = h.readAt(seg.fileOffset + done, out, seg.bufOffset + done, seg.len - done)
-                        if (n <= 0) break // hole (unwritten) — leave as zero
+                        if (n <= 0) break // hole (unwritten), so leave it as zero
                         done += n
                     }
                 }

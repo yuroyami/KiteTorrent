@@ -26,7 +26,7 @@ class HttpErrorTest {
 
     @Test
     fun messageMatchesCategoryFormat() {
-        // "<code> <reason>" — exactly what http_category().message(ev) builds.
+        // "<code> <reason>": exactly what http_category().message(ev) builds.
         assertEquals("200 OK", HttpError.OK.message)
         assertEquals("301 Moved Permanently", HttpError.MOVED_PERMANENTLY.message)
         assertEquals("302 Moved Temporarily", HttpError.MOVED_TEMPORARILY.message)
@@ -38,7 +38,7 @@ class HttpErrorTest {
     @Test
     fun lookupAndUnknownFallback() {
         assertSame(HttpError.NOT_FOUND, HttpError.fromCodeOrNull(404))
-        assertNull(HttpError.fromCodeOrNull(418)) // I'm a teapot — not in libtorrent's set
+        assertNull(HttpError.fromCodeOrNull(418)) // I'm a teapot, not in libtorrent's set
 
         // Unknown codes fall back to "(unknown HTTP error)" but keep the numeric prefix.
         assertEquals("418 (unknown HTTP error)", HttpError.messageOf(418))

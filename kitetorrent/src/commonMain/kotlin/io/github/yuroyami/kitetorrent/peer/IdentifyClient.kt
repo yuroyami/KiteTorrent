@@ -4,19 +4,19 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
 import io.github.yuroyami.kitetorrent.util.StringUtil
 
 /**
- * Peer-id → human client identification — the pure-Kotlin port of libtorrent's
+ * Peer-id → human client identification: the pure-Kotlin port of libtorrent's
  * `identify_client` machinery (src/identify_client.cpp / include/libtorrent/identify_client.hpp).
  *
  * BitTorrent clients stamp an identifying prefix on the front of their 20-byte
  * peer-id. There are a handful of competing conventions:
  *
- *  - **Azureus style** `"-XXmmtt-"` — a two-letter client code (`XX`) followed by
+ *  - **Azureus style** `"-XXmmtt-"`: a two-letter client code (`XX`) followed by
  *    four base-36-ish version digits, bracketed by `'-'`. The overwhelming majority
  *    of modern clients use this (`-UT2210-` = uTorrent 2.2.10, `-lt0D60-` = rTorrent,
  *    `-qB4500-` = qBittorrent, …). See the [NameMap] table.
- *  - **Shadow style** — a single leading letter then version characters; either
+ *  - **Shadow style**: a single leading letter then version characters; either
  *    base-36 digits up to a `"--"` separator at offset 4, or three raw bytes.
- *  - **Mainline style** `"M1-2-3--"` — the original BitTorrent client: a letter then
+ *  - **Mainline style** `"M1-2-3--"`, the original BitTorrent client: a letter then
  *    dash-separated decimal version fields.
  *  - **Non-standard** special cases (XBT, Opera, BitComet's `exbc`, eXeem, Bits on
  *    Wheels, Experimental, …) handled before the structured parsers.
@@ -28,14 +28,14 @@ import io.github.yuroyami.kitetorrent.util.StringUtil
  * [io.github.yuroyami.kitetorrent.generateFingerprint] (the *generation* side).
  *
  * Public entry points:
- *  - [identifyClient] — libtorrent's `identify_client` / `identify_client_impl`,
+ *  - [identifyClient]: libtorrent's `identify_client` / `identify_client_impl`,
  *    returning a display string such as `"uTorrent 2.2.10"` or `"Unknown [....]"`.
- *  - [parseClientInfo] — libtorrent's `client_fingerprint`, returning a structured
+ *  - [parseClientInfo]: libtorrent's `client_fingerprint`, returning a structured
  *    [ClientInfo] for the three well-formed styles, or `null` otherwise.
  */
 
 /**
- * A decoded peer-id fingerprint — the port of libtorrent's `fingerprint` struct as
+ * A decoded peer-id fingerprint: the port of libtorrent's `fingerprint` struct as
  * produced by `parse_az_style` / `parse_shadow_style` / `parse_mainline_style`.
  *
  * @property name    the resolved human client name (e.g. `"uTorrent"`,
@@ -76,7 +76,7 @@ data class ClientInfo(
 enum class ClientStyle { AZUREUS, SHADOW, MAINLINE }
 
 /**
- * Map a 20-byte peer-id to a human-readable client name and version — the port of
+ * Map a 20-byte peer-id to a human-readable client name and version: the port of
  * libtorrent's `identify_client` (`aux::identify_client_impl`).
  *
  * Resolution order is identical to libtorrent:
@@ -84,7 +84,7 @@ enum class ClientStyle { AZUREUS, SHADOW, MAINLINE }
  *  2. the non-standard [GenericMappings] table (offset + literal-prefix matches).
  *  3. the bespoke special cases: Bits on Wheels, eXeem, the two Experimental
  *     builds.
- *  4. Azureus style, then Shadow style, then Mainline style — each rendered via the
+ *  4. Azureus style, then Shadow style, then Mainline style, each rendered via the
  *     two-letter-code lookup table.
  *  5. first-12-bytes-zero → `"Generic"`.
  *  6. otherwise `"Unknown [....]"` with non-printable bytes shown as `'.'`.
@@ -96,7 +96,7 @@ enum class ClientStyle { AZUREUS, SHADOW, MAINLINE }
 fun identifyClient(peerId: Sha1Hash): String = IdentifyClient.identify(peerId)
 
 /**
- * Structured peer-id fingerprint extraction — the port of libtorrent's
+ * Structured peer-id fingerprint extraction: the port of libtorrent's
  * `client_fingerprint`. Recognises only the three well-formed styles (Azureus,
  * Shadow, Mainline) and returns `null` for everything else (including the
  * non-standard special cases that [identifyClient] still names).
@@ -121,7 +121,7 @@ internal object IdentifyClient {
     /**
      * libtorrent `decode_digit`: a base-36-ish digit where `'0'..'9'` map to `0..9`
      * and everything else is treated as a letter, `c - 'A' + 10` (so `'A' -> 10`,
-     * `'Z' -> 35`, lowercase and punctuation produce libtorrent's exact — if odd —
+     * `'Z' -> 35`, lowercase and punctuation produce libtorrent's exact (if odd)
      * arithmetic results). [c] is an unsigned byte value (0..255).
      */
     private fun decodeDigit(c: Int): Int {
@@ -144,7 +144,7 @@ internal object IdentifyClient {
 
     // Must stay ordered exactly as libtorrent's `name_map` (alphabetically by the
     // C-string code, with NUL < any printable char so single-letter codes sort
-    // before two-letter codes sharing the first letter — e.g. "A" before "AB").
+    // before two-letter codes sharing the first letter, e.g. "A" before "AB").
     private val NameMap: Array<MapEntry> = arrayOf(
         MapEntry("7T", "aTorrent for android"),
         MapEntry("A", "ABC"),
@@ -250,7 +250,7 @@ internal object IdentifyClient {
 
     /**
      * The two characters of a code, with a missing second character treated as NUL
-     * (code 0) — exactly how libtorrent's C-strings behave for single-letter codes.
+     * (code 0), exactly how libtorrent's C-strings behave for single-letter codes.
      */
     private fun codeChar(code: String, i: Int): Int = if (i < code.length) code[i].code else 0
 
@@ -266,7 +266,7 @@ internal object IdentifyClient {
 
     /**
      * Resolve a two-character client code to a name via binary search over
-     * [NameMap] — the port of `lookup()`'s `std::lower_bound` + equality check.
+     * [NameMap]: the port of `lookup()`'s `std::lower_bound` + equality check.
      *
      * @param c0 first code character's value, @param c1 second (NUL/0 for
      *        single-letter codes). Returns the table name on an exact two-char
@@ -442,7 +442,7 @@ internal object IdentifyClient {
      * followed by `--`. Returns a [ClientInfo] with [ClientStyle.MAINLINE] or `null`.
      */
     private fun parseMainlineStyle(pid: IntArray): ClientInfo? {
-        // "%1c" — first char, must be printable (checked after the scan in C++).
+        // "%1c": first char, must be printable (checked after the scan in C++).
         val nameChar = pid[0].toChar()
         if (!StringUtil.isPrint(nameChar)) return null
 
@@ -482,7 +482,7 @@ internal object IdentifyClient {
          * Parse a `%3d` field: optional sign, then 1..3 decimal digits, at most 3
          * input characters consumed total. Returns the value, or `null` if no digit
          * was found (a conversion failure, which makes `sscanf` stop and report
-         * fewer assignments — i.e. a non-match for us).
+         * fewer assignments, i.e. a non-match for us).
          */
         fun scanInt(): Int? {
             var consumed = 0
@@ -520,7 +520,7 @@ internal object IdentifyClient {
     // -------------------------------------------------------------------------
 
     /**
-     * The 20 peer-id bytes as unsigned 0..255 ints — convenient for the byte
+     * The 20 peer-id bytes as unsigned 0..255 ints, convenient for the byte
      * comparisons the C++ does directly on `std::uint8_t`.
      */
     private fun bytesOf(peerId: Sha1Hash): IntArray {

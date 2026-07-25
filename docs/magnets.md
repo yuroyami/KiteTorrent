@@ -89,7 +89,7 @@ if (session == null) {
     session.onPieceVerified = { piece -> println("piece $piece verified") }
     session.onStateChanged = { state -> println("state: $state") }
 
-    // progress() suspends — read it from a coroutine.
+    // progress() suspends, so read it from a coroutine.
     scope.launch {
         while (!session.isSeeding()) {
             println("${(session.progress() * 100).toInt()}%")
@@ -167,7 +167,7 @@ val session = engine.addMagnet(magnet) { torrent ->
 }
 ```
 
-With `enableDht = true` and a successful bootstrap, the convenience `addMagnet` pools DHT-discovered peers together with any tracker peers automatically. You do not call the DHT yourself: `discoverPeers` issues the `get_peers` lookup under the hood.
+With `enableDht = true` and a successful bootstrap, the convenience `addMagnet` pools DHT-discovered peers together with any tracker peers automatically. You do not call the DHT yourself, because `discoverPeers` issues the `get_peers` lookup for you.
 
 If you need the peer list directly, for example to inspect it or feed it to the explicit `addMagnet` overload, call `discoverPeers`:
 
@@ -176,7 +176,7 @@ val peers = engine.discoverPeers(magnet.infoHashV1!!, magnet.trackers)
 println("found ${peers.size} peers")
 ```
 
-`discoverPeers(infoHash, trackers)` returns a deduplicated `List<PeerEndpoint>` from the DHT and the given trackers. Any single source failing is swallowed; you get the union of whatever responded.
+`discoverPeers(infoHash, trackers)` returns a deduplicated `List<PeerEndpoint>` from the DHT and the given trackers. A failure in any single source is ignored, so you get the union of whatever responded.
 
 !!! warning "Bootstrap before you discover"
     A freshly constructed DHT node knows no other nodes, so a lookup against it returns nothing. Always `bootstrapDht(...)` (and give it a moment to populate its routing table) before relying on the DHT for discovery. Without `enableDht = true`, the engine has no DHT at all and peer discovery falls back to trackers only.
@@ -227,7 +227,7 @@ suspend fun fetch(scope: CoroutineScope, uri: String, saveDir: String) {
     session.onPieceVerified = { piece -> println("piece $piece verified") }
     session.onStateChanged = { state -> println("-> $state") }
 
-    // progress() suspends — read it from a coroutine.
+    // progress() suspends, so read it from a coroutine.
     scope.launch {
         while (!session.isSeeding()) {
             println("${(session.progress() * 100).toInt()}%")

@@ -11,7 +11,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Demultiplexes one UDP socket across many [UtpStream]s — the port of libtorrent's
+ * Demultiplexes one UDP socket across many [UtpStream]s: the port of libtorrent's
  * `utp_socket_manager` (src/utp_socket_manager.cpp) plus the session-level routing
  * that shares the listen socket between uTP and the DHT.
  *
@@ -22,8 +22,8 @@ import kotlinx.coroutines.withContext
  * the same:
  *
  *  - [start] pumps [socket]; a datagram is uTP iff its first byte decodes as
- *    `version == 1` with a known packet type (a bencoded DHT message starts with
- *    `'d'` = 0x64, which fails that test — the exact discrimination libtorrent uses).
+ *    `version == 1` with a known packet type. A bencoded DHT message starts with
+ *    `'d'` = 0x64, which fails that test. libtorrent discriminates the same way.
  *  - uTP datagrams are routed to the [UtpStream] registered under
  *    `(host, port, connection-id)`; an unmatched `ST_SYN` becomes a **passive open**:
  *    a new stream is created, fed the SYN, and handed to [onIncomingConnection].
@@ -45,16 +45,16 @@ class UtpSocketManager(
     private val keys = HashMap<UtpStream, String>()
     private var nextConnectionId = 0x4000 // arbitrary start; wraps within 16 bits
 
-    /** One real monotonic clock shared by every stream — drives RTT + the RTO timer. */
+    /** One real monotonic clock shared by every stream. It drives RTT and the RTO timer. */
     private val clock = MonotonicMicros()
 
     /** Datagrams that are not uTP (the DHT's bencoded packets), behind [dhtTransport]. */
     private val otherInbox = Channel<UdpPacket>(Channel.UNLIMITED)
 
     /**
-     * Invoked (in a fresh coroutine) for each accepted inbound uTP connection, after
-     * its SYN is processed — the engine reads the BitTorrent handshake off it and
-     * routes by info-hash, exactly like a TCP accept.
+     * The manager calls this (in a fresh coroutine) for each accepted inbound uTP
+     * connection, once its SYN is processed. The engine then reads the BitTorrent
+     * handshake off the stream and routes by info-hash, exactly like a TCP accept.
      */
     var onIncomingConnection: (suspend (UtpStream) -> Unit)? = null
 
@@ -91,7 +91,7 @@ class UtpSocketManager(
         try {
             stream.connect()
         } catch (e: Throwable) {
-            // also runs under cancellation (a dial timeout) — must still unregister
+            // also runs under cancellation (a dial timeout), so it must still unregister
             withContext(NonCancellable) { disconnect(stream) }
             throw e
         }
@@ -106,7 +106,7 @@ class UtpSocketManager(
 
     /**
      * A virtual [DatagramTransport] carrying every non-uTP datagram, for the DHT.
-     * `close()` is a no-op — the manager owns the real socket.
+     * `close()` is a no-op, because the manager owns the real socket.
      */
     fun dhtTransport(): DatagramTransport = object : DatagramTransport {
         override val localPort: Int get() = socket.localPort
@@ -128,7 +128,7 @@ class UtpSocketManager(
             existing.onDatagram(pkt.data)
             return
         }
-        if (header.type != UtpType.ST_SYN) return // not ours and not an open — drop
+        if (header.type != UtpType.ST_SYN) return // not ours and not an open, so drop it
 
         // passive open: the acceptor receives on (SYN id + 1)
         val stream = UtpStream(socket, pkt.host, pkt.port, scope, nowMicros = clock)
@@ -149,7 +149,7 @@ class UtpSocketManager(
 
     /**
      * Routing key: remote **port + connection id**, deliberately not the host
-     * string — the same address can arrive as `"127.0.0.1"` on dial but
+     * string. The same address can arrive as `"127.0.0.1"` on dial but
      * `"localhost"` on receive (resolver-dependent), and the 16-bit id is the real
      * discriminator (libtorrent's `utp_socket_manager` also keys its socket map by
      * id). A cross-host (port, id) collision just drops that stream's packets.
@@ -160,7 +160,7 @@ class UtpSocketManager(
         /**
          * True if [data] looks like a uTP packet: 20-byte header, version nibble 1,
          * known type nibble. A DHT/bencode datagram starts with `'d'` (0x64 →
-         * version 4) and always fails this — the same sniff `session_impl` uses.
+         * version 4) and always fails this check. `session_impl` sniffs the same way.
          */
         fun isUtp(data: ByteArray): Boolean {
             if (data.size < UTP_HEADER_SIZE) return false

@@ -11,7 +11,7 @@ import io.github.yuroyami.kitetorrent.util.StringUtil
 import io.github.yuroyami.kitetorrent.util.UrlEscape
 
 /**
- * The information extracted from a `magnet:` URI — the pure-Kotlin counterpart of the
+ * The information extracted from a `magnet:` URI: the pure-Kotlin counterpart of the
  * subset of libtorrent's `add_torrent_params` that [parseMagnetUri] fills in
  * (src/magnet_uri.cpp, `parse_magnet_uri`).
  *
@@ -82,7 +82,7 @@ class MagnetLink(
 }
 
 /**
- * Parsing and formatting of `magnet:` URIs — pure-Kotlin port of `parse_magnet_uri` and
+ * Parsing and formatting of `magnet:` URIs: a pure-Kotlin port of `parse_magnet_uri` and
  * `make_magnet_uri` from libtorrent's src/magnet_uri.cpp.
  *
  * The grammar handled is BitTorrent's flavour of the magnet scheme:
@@ -180,7 +180,7 @@ object MagnetUri {
                 }
 
                 StringUtil.stringEqualNoCase(name, "tr") -> {
-                    // tracker — decode, validate, then record with an increasing tier
+                    // tracker: decode, validate, then record with an increasing tier
                     val tracker = UrlEscape.unescape(value)
                     if (isValidTrackerUrl(tracker)) {
                         trackers.add(tracker)
@@ -212,7 +212,7 @@ object MagnetUri {
                 }
 
                 StringUtil.stringEqualNoCase(name, "x.pe") -> {
-                    // peer endpoint — kept verbatim if it looks like host:port
+                    // peer endpoint: kept verbatim if it looks like host:port
                     parseEndpoint(value)?.let { peers.add(it) }
                 }
 
@@ -250,7 +250,7 @@ object MagnetUri {
 
     /**
      * Parse a single `xt` value. Returns a [LibtorrentError] on a malformed info-hash
-     * (which is fatal to the whole parse in the C++), or null on success — invoking
+     * (which is fatal to the whole parse in the C++), or null on success, invoking
      * [emit] with the v1 and/or v2 hash it decoded. An `xt` value that is neither a
      * `urn:btih:` nor a `urn:btmh:` URN is silently ignored (emit not called).
      */
@@ -295,7 +295,7 @@ object MagnetUri {
             return null
         }
 
-        // unrecognized urn:* — ignored, no error
+        // an unrecognized urn:* is ignored, no error
         return null
     }
 
@@ -306,7 +306,7 @@ object MagnetUri {
      * `continue`-on-garbage behaviour for individual malformed tokens.
      */
     private fun parseSelectOnly(value: String): Set<Int>? {
-        // accept only digits, '-' and ',' — any other char rejects the whole value
+        // accept only digits, '-' and ','. Any other char rejects the whole value
         for (c in value) {
             if (!StringUtil.isDigit(c) && c != '-' && c != ',') return null
         }
@@ -345,8 +345,8 @@ object MagnetUri {
      * libtorrent's `is_valid_tracker_url` (src/parse_url.cpp). Rejects empty URLs, any
      * URL containing a control character or space (RFC 3986 + CRLF-injection defence),
      * and anything not beginning (case-insensitively) with `http://`, `https://`, or
-     * `udp://`. The remaining structural check from the C++ — `parse_url_components`
-     * succeeding — is reproduced by [parseUrlComponentsOk].
+     * `udp://`. The remaining structural check from the C++ (`parse_url_components`
+     * succeeding) is reproduced by [parseUrlComponentsOk].
      */
     fun isValidTrackerUrl(url: String): Boolean {
         if (url.isEmpty()) return false
@@ -365,8 +365,8 @@ object MagnetUri {
     }
 
     /**
-     * The success/failure half of libtorrent's `parse_url_components` (src/parse_url.cpp)
-     * — we only need the boolean (does it parse?) for [isValidTrackerUrl], not the
+     * The success/failure half of libtorrent's `parse_url_components` (src/parse_url.cpp).
+     * Only the boolean (does it parse?) matters for [isValidTrackerUrl], not the
      * decomposed pieces. The structural rules reproduced here:
      *  - there is a `://` after the scheme;
      *  - the hostname (after stripping an optional `user:pass@` and an optional `:port`)
@@ -462,7 +462,7 @@ object MagnetUri {
     // -------------------------------------------------------------------------
 
     /**
-     * Format a `magnet:` URI for [info] — port of `make_magnet_uri(torrent_info const&)`
+     * Format a `magnet:` URI for [info]: a port of `make_magnet_uri(torrent_info const&)`
      * (which forwards to `make_magnet_uri(add_torrent_params const&)`) in
      * src/magnet_uri.cpp.
      *
@@ -511,7 +511,7 @@ object MagnetUri {
     }
 
     /**
-     * Format a `magnet:` URI from explicit pieces — the analogue of
+     * Format a `magnet:` URI from explicit pieces: the analogue of
      * `make_magnet_uri(add_torrent_params const&)` for callers that do not have a
      * [TorrentInfo]. At least one of [infoHashV1] / [infoHashV2] must be non-null or ""
      * is returned. [dhtNodes] are emitted as `dht=host:port` and [peers] verbatim as

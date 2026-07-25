@@ -14,10 +14,9 @@ import kotlin.random.Random
  * we keep only the protocol payload that both wire formats actually exchange, so
  * the same value object drives either client.
  *
- * NOTE (cross-agent contract): these types are the agreed seam between the UDP and
- * HTTP tracker modules. If the HTTP tracker module also declares them, only one
- * copy must survive — they are intentionally defined once, here, in the shared
- * `...session.tracker` package. The UDP client ([UdpTracker]) consumes them.
+ * These types are the shared seam between the UDP and HTTP tracker modules. They are
+ * defined once, here, in the `...session.tracker` package. Do not declare a second
+ * copy in the HTTP tracker module. The UDP client ([UdpTracker]) consumes them.
  */
 
 /**
@@ -41,7 +40,7 @@ enum class TrackerEvent(val code: Int) {
 }
 
 /**
- * A single peer endpoint returned by a tracker — an IP address (in dotted-quad or
+ * A single peer endpoint returned by a tracker: an IP address (in dotted-quad or
  * colon-hex string form) and a TCP port. This is the flattened equivalent of
  * libtorrent's `ipv4_peer_entry` / `ipv6_peer_entry` (`peer.hpp`); KiteTorrent's
  * peer layer keeps addresses as host strings (see `peer.PeerAddress`), so the
@@ -92,7 +91,7 @@ data class AnnounceRequest(
 )
 
 /**
- * A tracker's response to an announce — the announce-relevant subset of
+ * A tracker's response to an announce. This is the announce-relevant subset of
  * libtorrent's `tracker_response`.
  *
  * @property interval seconds the client should wait before re-announcing
@@ -134,7 +133,7 @@ data class AnnounceResponse(
 }
 
 /**
- * A tracker's response to a scrape — the per-info-hash swarm statistics, porting the
+ * A tracker's response to a scrape: the per-info-hash swarm statistics. It ports the
  * arguments libtorrent passes to `request_callback::tracker_scrape_response`
  * (complete, incomplete, downloaded, downloaders).
  *
@@ -150,8 +149,8 @@ data class ScrapeResponse(
 )
 
 /**
- * Per-URL announce bookkeeping — the KiteTorrent port of the live state libtorrent
- * carries in `aux::announce_entry` / `aux::announce_infohash`
+ * Per-URL announce bookkeeping. This is the KiteTorrent port of the live state
+ * libtorrent carries in `aux::announce_entry` and `aux::announce_infohash`
  * (`include/libtorrent/aux_/announce_entry.hpp`). The session module owns the
  * announce *loop* and tier logic; this struct is the mutable state it threads per
  * tracker URL so the loop can decide *when* to (re-)announce and *what* to send.
@@ -165,8 +164,8 @@ data class ScrapeResponse(
  *   lowest first (BEP-12, libtorrent `announce_entry::tier`).
  * @property fails consecutive failed announces; reset to 0 on success. libtorrent
  *   stores this as a 7-bit field (`announce_infohash::fails`), so it saturates at 127.
- * @property isWorking whether the most recent announce succeeded — libtorrent derives
- *   `is_working()` as `fails == 0`, which we mirror via [markWorking]/[markFailed].
+ * @property isWorking whether the most recent announce succeeded. libtorrent derives
+ *   `is_working()` as `fails == 0`, which we mirror via [markWorking] and [markFailed].
  * @property nextAnnounceEpochSecs the wall-clock epoch-second instant the loop may
  *   next announce to this tracker (libtorrent `announce_infohash::next_announce`),
  *   `0` meaning "as soon as possible".
@@ -234,10 +233,10 @@ class AnnounceEntry(
  * the arithmetic.
  */
 object TrackerBackoff {
-    /** libtorrent `tracker_retry_delay_min` — never retry sooner than 5 seconds. */
+    /** libtorrent `tracker_retry_delay_min`: never retry sooner than 5 seconds. */
     const val MIN_DELAY_SECS = 5
 
-    /** libtorrent `tracker_retry_delay_max` — never wait more than 60 minutes. */
+    /** libtorrent `tracker_retry_delay_max`: never wait more than 60 minutes. */
     const val MAX_DELAY_SECS = 60 * 60
 
     /** libtorrent `settings_pack::tracker_backoff` default of 250 (percent). */
@@ -272,9 +271,8 @@ object TrackerBackoff {
  * (`torrent::tracker_key()`), a stable 32-bit identifier the tracker uses to
  * recognise us across IP changes. libtorrent derives it deterministically from
  * object addresses; that is impossible (and pointless) on KMP, so we generate a
- * random non-prediction-relevant 32-bit value once per torrent and reuse it — the
- * wire semantics ("the same opaque key on every announce for this torrent") are
- * identical. The old default of `0` is replaced by [generate].
+ * random 32-bit value once per torrent and reuse it. The wire semantics are
+ * identical: the same opaque key travels on every announce for this torrent. The old default of `0` is replaced by [generate].
  */
 object TrackerKey {
     /** Draw a fresh random 32-bit announce key for a torrent. */

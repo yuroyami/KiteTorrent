@@ -15,8 +15,8 @@ import kotlin.test.assertFailsWith
  * Every vector here was produced by the canonical zlib reference implementation
  * (Python's `zlib` / `gzip`, which wrap the same zlib C library libtorrent would
  * otherwise link) or hand-derived directly from RFC 1951, then verified to
- * round-trip. They cover all three DEFLATE block types — stored, fixed-Huffman,
- * dynamic-Huffman — plus the gzip and zlib wrappers and the main error paths.
+ * round-trip. They cover all three DEFLATE block types (stored, fixed-Huffman and
+ * dynamic-Huffman), plus the gzip and zlib wrappers and the main error paths.
  */
 class CompressionTest {
 

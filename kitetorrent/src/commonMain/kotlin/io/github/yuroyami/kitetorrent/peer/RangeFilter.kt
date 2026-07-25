@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.peer
 
 /**
- * The generic, byte-array keyed range filter — the port of
+ * The generic, byte-array keyed range filter. This is the port of
  * `libtorrent::aux::filter_impl<Addr>` (`src/ip_filter.cpp`,
  * `include/libtorrent/ip_filter.hpp`).
  *
@@ -19,10 +19,10 @@ package io.github.yuroyami.kitetorrent.peer
  * ### Representation
  * The filter stores a **sorted, non-overlapping** list of [Range]s. Each entry
  * records the address its range *starts* at plus the [Range.access] flags for
- * that range; the *end* of a range is implicit — it runs up to (but not
- * including) the next entry's start, and the final entry runs to the maximum
- * address. The list is never empty: it is seeded with a single `{zero, 0}` entry
- * so that, by construction, every address maps to exactly one range. Coalescing
+ * that range. The *end* of a range is implicit: it runs up to (but not including)
+ * the next entry's start, and the final entry runs to the maximum address. The list
+ * is never empty: it is seeded with a single `{zero, 0}` entry so that, by
+ * construction, every address maps to exactly one range. Coalescing
  * in [addRule] keeps the invariant that no two adjacent ranges carry the same
  * flags, so the list is always the minimum description of the filter.
  *
@@ -38,7 +38,7 @@ package io.github.yuroyami.kitetorrent.peer
 internal class RangeFilter(private val keyWidth: Int) {
 
     /**
-     * One entry of the access list — the port of `filter_impl<Addr>::range`.
+     * One entry of the access list, the port of `filter_impl<Addr>::range`.
      * [start] is the (big-endian) address the range begins at; [access] the flags
      * that apply from [start] up to the next entry's start. Both are mutable to
      * mirror the in-place `const_cast` rewrite libtorrent does in `add_rule`.
@@ -53,16 +53,16 @@ internal class RangeFilter(private val keyWidth: Int) {
     }
 
     /**
-     * True if the filter contains no effective rules — i.e. it is still the lone
-     * seeded `{zero, 0}` entry. Port of `filter_impl<Addr>::empty`.
+     * True if the filter contains no effective rules, which means it still holds
+     * only the seeded `{zero, 0}` entry. Port of `filter_impl<Addr>::empty`.
      */
     fun isEmpty(): Boolean =
         list.isEmpty() ||
             (list.size == 1 && list[0].access == 0 && isZeroKey(list[0].start))
 
     /**
-     * Index of the first entry whose `start` is strictly greater than [key] —
-     * the port of `std::set::upper_bound`. Returns [list]`.size` when no entry
+     * Index of the first entry whose `start` is strictly greater than [key].
+     * This is the port of `std::set::upper_bound`. Returns [list]`.size` when no entry
      * exceeds [key]. The list is sorted by `start`, so this is a binary search.
      */
     private fun upperBound(key: ByteArray): Int {
@@ -76,8 +76,8 @@ internal class RangeFilter(private val keyWidth: Int) {
     }
 
     /**
-     * Insert a fresh range at its correct sorted position and return that index —
-     * the order-preserving port of `std::set::insert`. libtorrent always passes a
+     * Insert a fresh range at its correct sorted position and return that index.
+     * This is the order-preserving port of `std::set::insert`. libtorrent always passes a
      * (correct) position hint, but `std::set` ignores a wrong hint and re-sorts;
      * we reproduce that by placing the entry by its [start] key (a strictly new
      * key, so [upperBound] yields the unique slot). [start] is defensively copied
@@ -90,7 +90,7 @@ internal class RangeFilter(private val keyWidth: Int) {
     }
 
     /**
-     * Returns the flags for [key] — port of `filter_impl<Addr>::access`. Finds the
+     * Returns the flags for [key], the port of `filter_impl<Addr>::access`. Finds the
      * last range whose start is `<= key` and returns its [Range.access].
      */
     fun access(key: ByteArray): Int {
@@ -172,8 +172,8 @@ internal class RangeFilter(private val keyWidth: Int) {
 
     /**
      * The current filter as a minimal, ascending list of `(first, last, flags)`
-     * triples — port of `filter_impl<Addr>::export_filter`. `first`/`last` are
-     * inclusive big-endian keys; the final range ends at [maxKey].
+     * triples, the port of `filter_impl<Addr>::export_filter`. `first` and `last`
+     * are inclusive big-endian keys; the final range ends at [maxKey].
      */
     fun exportRanges(): List<IpRange> {
         val out = ArrayList<IpRange>(list.size)
@@ -206,7 +206,7 @@ internal class RangeFilter(private val keyWidth: Int) {
 
     companion object {
         /**
-         * Big-endian increment with carry — exact port of `aux::plus_one`. Like
+         * Big-endian increment with carry, an exact port of `aux::plus_one`. Like
          * the C++ original it wraps the all-ones key back to zero, but [addRule]
          * only ever calls it on a key strictly below the maximum, so that wrap is
          * never observed by the filter.
@@ -225,7 +225,7 @@ internal class RangeFilter(private val keyWidth: Int) {
         }
 
         /**
-         * Big-endian decrement with borrow — port of `aux::minus_one`.
+         * Big-endian decrement with borrow, the port of `aux::minus_one`.
          */
         internal fun minusOne(a: ByteArray): ByteArray {
             val t = a.copyOf()
@@ -241,8 +241,8 @@ internal class RangeFilter(private val keyWidth: Int) {
         }
 
         /**
-         * Unsigned, big-endian, lexicographic comparison of two equal-width keys —
-         * the `Addr::operator<` the filter relies on. Mirrors
+         * Unsigned, big-endian, lexicographic comparison of two equal-width keys.
+         * This is the `Addr::operator<` the filter relies on. Mirrors
          * [PeerAddress.compareTo] within a single family.
          */
         internal fun compareKeys(a: ByteArray, b: ByteArray): Int {
@@ -258,7 +258,7 @@ internal class RangeFilter(private val keyWidth: Int) {
 }
 
 /**
- * One coalesced range exported by [RangeFilter.exportRanges] — the port of
+ * One coalesced range exported by [RangeFilter.exportRanges]. This is the port of
  * `libtorrent::ip_range<Addr>` reduced to its raw form. [first] and [last] are
  * inclusive big-endian keys (4/16 bytes for an IP, 2 for a port) and [flags] the
  * access flags ([IpFilter.BLOCKED] or 0).

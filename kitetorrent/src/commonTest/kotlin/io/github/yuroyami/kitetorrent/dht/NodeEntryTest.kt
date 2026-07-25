@@ -9,7 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Tests for [NodeEntry] — the port of `src/kademlia/node_entry.cpp` and the
+ * Tests for [NodeEntry]: the port of `src/kademlia/node_entry.cpp` and the
  * inline accessors in `node_entry.hpp`. The counter/flag semantics are pinned
  * verbatim from the C++ (sentinels `0xff` "never pinged", `0xffff` "rtt
  * unknown"), and the RTT EWMA reproduces `rtt*2/3 + new/3`.

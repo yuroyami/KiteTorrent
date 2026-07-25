@@ -7,7 +7,7 @@ package io.github.yuroyami.kitetorrent.crypto
  *
  * RC4 is symmetric: the same operation both encrypts and decrypts (it XORs the
  * keystream into the data), so [process] serves both directions. The cipher is
- * stateful — each call to [process] advances the keystream — exactly like
+ * stateful, because each call to [process] advances the keystream, exactly like
  * libtorrent's `rc4_handler`, which keeps separate incoming and outgoing [Rc4]
  * states per connection.
  *

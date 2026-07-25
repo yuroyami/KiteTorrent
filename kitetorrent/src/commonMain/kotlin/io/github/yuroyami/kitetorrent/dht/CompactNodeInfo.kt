@@ -5,14 +5,14 @@ import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
 import io.github.yuroyami.kitetorrent.peer.PeerAddress
 
 /**
- * A network endpoint (address + UDP/TCP port) as it appears inside DHT messages —
+ * A network endpoint (address + UDP/TCP port) as it appears inside DHT messages:
  * the pure-Kotlin stand-in for the `udp::endpoint` / `tcp::endpoint` that
  * libtorrent serialises with `aux::write_endpoint` / `aux::read_v4_endpoint`
  * (include/libtorrent/socket_io.hpp).
  *
  * libtorrent's compact endpoint form is the address in network byte order (4 bytes
  * for IPv4, 16 for IPv6) immediately followed by the 16-bit port, big-endian. That
- * is exactly 6 bytes for v4 and 18 for v6 — see [encode] / [decodeV4] / [decodeV6].
+ * is exactly 6 bytes for v4 and 18 for v6. See [encode] / [decodeV4] / [decodeV6].
  *
  * KiteTorrent has no socket types in `commonMain`, and [PeerAddress] exposes only
  * `parseOrNull` (no raw-bytes constructor), so this type owns the raw [address]
@@ -42,7 +42,7 @@ class DhtEndpoint(val address: ByteArray, val port: Int) {
 
     /**
      * Append this endpoint's compact form (address bytes then big-endian port) to
-     * [out] — port of `aux::write_endpoint`.
+     * [out]: a port of `aux::write_endpoint`.
      */
     fun encodeInto(out: ByteArrayBuilder) {
         out.append(address)
@@ -83,7 +83,7 @@ class DhtEndpoint(val address: ByteArray, val port: Int) {
         const val V6_SIZE = 18
 
         /**
-         * Decode a 6-byte IPv4 endpoint from [buf] at [offset] — port of
+         * Decode a 6-byte IPv4 endpoint from [buf] at [offset]: a port of
          * `aux::read_v4_endpoint`.
          */
         fun decodeV4(buf: ByteArray, offset: Int = 0): DhtEndpoint {
@@ -94,7 +94,7 @@ class DhtEndpoint(val address: ByteArray, val port: Int) {
         }
 
         /**
-         * Decode an 18-byte IPv6 endpoint from [buf] at [offset] — port of
+         * Decode an 18-byte IPv6 endpoint from [buf] at [offset]: a port of
          * `aux::read_v6_endpoint`.
          */
         fun decodeV6(buf: ByteArray, offset: Int = 0): DhtEndpoint {
@@ -166,7 +166,7 @@ class DhtEndpoint(val address: ByteArray, val port: Int) {
 }
 
 /**
- * A single entry in a DHT compact `nodes` / `nodes6` list — a 20-byte [NodeId]
+ * A single entry in a DHT compact `nodes` / `nodes6` list: a 20-byte [NodeId]
  * followed by a compact [DhtEndpoint]. This is the on-wire form produced by
  * libtorrent's `write_nodes_entry` (src/kademlia/node.cpp), which concatenates
  * `id` and `write_endpoint(ep)` for each node.
@@ -184,7 +184,7 @@ class CompactNode(val id: Sha1Hash, val endpoint: DhtEndpoint) {
 }
 
 /**
- * Encode/decode of the compact `nodes` strings that BEP-5 queries return — the
+ * Encode/decode of the compact `nodes` strings that BEP-5 queries return: the
  * counterpart to libtorrent's `write_nodes_entry` and the inline decode loops in
  * `find_data` / the routing table's `read_nodes`. The IPv4 form ("n4"/`nodes`,
  * 26-byte records) and the IPv6 form ("n6"/`nodes6`, 38-byte records) are encoded
@@ -199,7 +199,7 @@ object CompactNodes {
     const val V6_NODE_SIZE = 38
 
     /**
-     * Concatenate the compact form of every node in [nodes] into one byte string —
+     * Concatenate the compact form of every node in [nodes] into one byte string: a
      * direct port of `write_nodes_entry`. Each record is `id || write_endpoint(ep)`.
      * The nodes may freely mix v4/v6 (libtorrent keeps them in separate keys, but
      * the encoding itself is just self-describing-width records).

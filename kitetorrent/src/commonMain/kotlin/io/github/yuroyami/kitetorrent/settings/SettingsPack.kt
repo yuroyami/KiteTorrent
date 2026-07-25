@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.settings
 
 /**
- * A collection of session-setting overrides — pure-Kotlin port of libtorrent's
+ * A collection of session-setting overrides. The pure-Kotlin port of libtorrent's
  * `settings_pack` (`settings_pack.hpp` / `settings_pack.cpp`).
  *
  * A [SettingsPack] stores only the settings that have been *explicitly* set on it
@@ -15,7 +15,7 @@ package io.github.yuroyami.kitetorrent.settings
  * value for getters, matching the defensive behaviour of the C++ accessors.
  *
  * Unlike the C++ version, which keeps its vectors sorted for binary search, this port
- * uses plain hash maps — the semantics (override-or-default, last-write-wins) are
+ * uses plain hash maps. The semantics (override-or-default, last-write-wins) are
  * identical; only the storage layout differs.
  */
 class SettingsPack {
@@ -118,8 +118,8 @@ class SettingsPack {
 
     companion object {
         /**
-         * A [SettingsPack] with every setting set to its libtorrent default value —
-         * port of the free function `default_settings()` in `settings_pack.cpp`.
+         * A [SettingsPack] with every setting set to its libtorrent default value.
+         * The port of the free function `default_settings()` in `settings_pack.cpp`.
          *
          * Like the C++ version, string settings whose default is "no value"
          * (`nullptr`) are *not* added to the pack.
@@ -141,7 +141,7 @@ class SettingsPack {
 
         /**
          * Look up the 16-bit setting key for a serialisation [name], or `-1` if the
-         * name is unknown — port of `setting_by_name()` (`settings_pack.cpp`),
+         * name is unknown. The port of `setting_by_name()` (`settings_pack.cpp`),
          * including the `"peer_tos"` backwards-compatibility alias for `peer_dscp`.
          */
         fun settingByName(name: String): Int {
@@ -163,7 +163,7 @@ class SettingsPack {
 
         /**
          * The serialisation name for a 16-bit setting key [name], or the empty string
-         * if the key is out of range — port of `name_for_setting()`
+         * if the key is out of range. The port of `name_for_setting()`
          * (`settings_pack.cpp`).
          */
         fun nameForSetting(name: Int): String {

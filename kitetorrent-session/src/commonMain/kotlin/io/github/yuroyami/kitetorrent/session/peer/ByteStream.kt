@@ -5,10 +5,9 @@ import io.github.yuroyami.kitetorrent.session.net.TcpConnection
 /**
  * The minimal byte-duplex a [PeerConnection] needs: read exactly N bytes, write a
  * frame. This is the seam between the protocol state machine and the concrete
- * socket — libtorrent buries the equivalent inside `peer_connection`'s
- * `m_recv_buffer`/`send_buffer` plumbing, coupling the protocol to Boost.Asio. By
- * factoring it out we keep [PeerConnection] testable against an in-memory duplex
- * with no live sockets.
+ * socket. libtorrent keeps the equivalent inside `peer_connection`'s `m_recv_buffer`
+ * and `send_buffer` code, which couples the protocol to Boost.Asio. Separating it lets
+ * you test [PeerConnection] against an in-memory duplex with no live sockets.
  *
  * [TcpConnection] (session.net) already provides exactly these two operations; the
  * [asByteStream] adapter wraps one without modifying it.

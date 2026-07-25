@@ -6,13 +6,13 @@ import kotlinx.coroutines.withTimeout
 
 /**
  * Pure big-endian (network byte order) packet build/parse for the NAT-PMP protocol
- * (RFC 6886) — the codec half of libtorrent's `natpmp` (`src/natpmp.cpp`). Every
+ * (RFC 6886): the codec half of libtorrent's `natpmp` (`src/natpmp.cpp`). Every
  * function here is a total function of its arguments: no sockets, no coroutines, no
  * I/O. The live [NatPmp] class layers the actual UDP round-trips on top.
  *
  * NAT-PMP is the simpler ancestor of PCP; libtorrent's `natpmp.cpp` speaks both and
  * falls back from PCP to NAT-PMP. We port only the NAT-PMP wire format
- * (`version == version_natpmp`, i.e. version byte 0) — the fixed 2-byte / 12-byte
+ * (`version == version_natpmp`, i.e. version byte 0): the fixed 2-byte / 12-byte
  * requests and the 12-byte / 16-byte responses the C++ builds in
  * `send_get_ip_address_request` / `send_map_request` and parses in `on_reply`.
  *
@@ -204,7 +204,7 @@ internal object NatPmpCodec {
 }
 
 /**
- * A NAT-PMP client — the live half of libtorrent's `natpmp` (`src/natpmp.cpp`),
+ * A NAT-PMP client: the live half of libtorrent's `natpmp` (`src/natpmp.cpp`),
  * speaking the NAT-PMP (RFC 6886) wire format over the proven [UdpSocket]. The
  * fixed-layout packet build/parse lives in [NatPmpCodec]; this class owns the UDP
  * round-trip to the gateway (always port **5351**, the NAT-PMP server port
@@ -218,12 +218,12 @@ internal object NatPmpCodec {
  * through structured concurrency.
  *
  * This class deliberately omits the full mapping table, expiry refresh timer and
- * PCP fallback of the C++ — those belong to the engine's port-mapping manager. It
+ * PCP fallback of the C++. Those belong to the engine's port-mapping manager. It
  * exposes the two request/response transactions a caller needs: query the external
  * address, and add (or, with `lifetimeSeconds = 0`, delete) a single mapping.
  *
  * @property udp the bound UDP socket to send from and receive on. Ownership stays
- *   with the caller — this class never closes it.
+ *   with the caller. This class never closes it.
  * @property gateway the default-route gateway IPv4 address (e.g. `"192.168.1.1"`),
  *   as libtorrent obtains from `get_gateway` / `enum_routes`.
  */
@@ -258,7 +258,7 @@ class NatPmp(
      * `on_reply`.
      *
      * On success returns the **public port the gateway actually granted** (which can
-     * differ from the requested [externalPort] — NAT-PMP routers may assign a
+     * differ from the requested [externalPort]: NAT-PMP routers may assign a
      * different port, and `on_reply` adopts `public_port` from the response). Returns
      * `null` if the gateway never answered within [maxAttempts] retransmissions or
      * replied with a non-zero result code.
@@ -286,7 +286,7 @@ class NatPmp(
     /**
      * The outcome of a successful [mapDetailed]: the public port the gateway granted
      * and the lease lifetime it actually assigned (which may differ from what was
-     * requested — `on_reply` adopts both `public_port` and `lifetime` from the
+     * requested: `on_reply` adopts both `public_port` and `lifetime` from the
      * response). The engine schedules its lease-refresh timer from [lifetimeSeconds].
      */
     data class MapGrant(
@@ -297,8 +297,8 @@ class NatPmp(
     )
 
     /**
-     * Like [map], but returns the full grant — the granted external port **and** the
-     * lifetime the gateway assigned — so the engine can drive its refresh timer.
+     * Like [map], but returns the full grant (the granted external port **and** the
+     * lifetime the gateway assigned), so the engine can drive its refresh timer.
      * Mirrors the same `send_map_request` → `on_reply` transaction.
      *
      * Returns `null` if the gateway never answered within [maxAttempts] retransmissions
@@ -323,7 +323,7 @@ class NatPmp(
      * Send [request] to the gateway and return the first datagram (from the gateway)
      * that [accept] parses into a non-null result, retransmitting with linear
      * back-off up to [maxAttempts] times. Datagrams from any other source, or that
-     * fail to parse, are dropped and we keep waiting — mirroring the
+     * fail to parse, are dropped and we keep waiting, mirroring the
      * `m_remote != m_nat_endpoint` guard and the mapping-table filter in
      * `natpmp::on_reply`.
      */

@@ -25,8 +25,9 @@ import kotlin.test.assertTrue
 /**
  * The complete magnet workflow through the public API: a seeder engine has the torrent;
  * a leecher engine, given ONLY a `magnet:?xt=urn:btih:…` link, fetches the metadata via
- * `ut_metadata`, builds the [TorrentInfo], and then downloads and verifies the data — all
- * by talking to the seeder. This exercises [KiteTorrentEngine.addMagnet] end to end.
+ * `ut_metadata`, builds the [TorrentInfo], and then downloads and verifies the data. It
+ * does all of that by talking to the seeder. This exercises
+ * [KiteTorrentEngine.addMagnet] end to end.
  */
 class MagnetEndToEndTest {
 

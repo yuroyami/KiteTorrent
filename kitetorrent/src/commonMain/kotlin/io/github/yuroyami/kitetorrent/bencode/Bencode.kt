@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.bencode
 import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
 
 /**
- * Bencode *encoder* — port of libtorrent's `bencode()` / `bencode_recursive`
+ * Bencode *encoder*, the port of libtorrent's `bencode()` and `bencode_recursive`
  * (bencode.hpp). Turns an [Entry] tree into canonical bencoded bytes.
  *
  * Dictionary keys are emitted in ascending raw-byte order. This is mandatory: the

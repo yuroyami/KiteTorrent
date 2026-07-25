@@ -13,16 +13,16 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Session-wide upload/download rate limiting — the live driver for the pure
+ * Session-wide upload/download rate limiting: the live driver for the pure
  * [BandwidthManager]/[BandwidthChannel] port.
  *
  * libtorrent gives `session_impl` one `bandwidth_manager` per direction plus a
  * global `bandwidth_channel` pair, with per-torrent channels layered on top; a
  * `peer_connection` asks for quota before moving payload and is parked in the
- * manager's queue when the buckets are dry. This class is that wiring on
+ * manager's queue when the buckets are empty. This class is that wiring on
  * coroutines: [acquireUpload]/[acquireDownload] **suspend** until the requested
  * bytes are granted, and a periodic [update] (driven by [start]'s ticker, or by a
- * test directly) refills the buckets and releases parked waiters — the
+ * test directly) refills the buckets and releases parked waiters. This is the
  * `on_tick` → `update_quotas` cadence.
  *
  * A channel whose limit is `0` is unlimited and never participates (libtorrent

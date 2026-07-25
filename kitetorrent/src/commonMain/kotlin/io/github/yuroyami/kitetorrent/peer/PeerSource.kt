@@ -1,11 +1,11 @@
 package io.github.yuroyami.kitetorrent.peer
 
 /**
- * The set of "where did we learn about this peer" flags — the pure-Kotlin port
+ * The set of "where did we learn about this peer" flags: the pure-Kotlin port
  * of the `peer_source_flags_t` constants in `include/libtorrent/peer_info.hpp`.
  *
  * In libtorrent this is a `bitfield_flag<std::uint8_t, …>`; we model the bitmap
- * as a plain [Int] (the v0 KiteTorrent convention of plain primitives over
+ * as a plain [Int] (KiteTorrent's convention of plain primitives over
  * strong flag types). Each constant below is a single bit, and a peer's
  * [TorrentPeer.source] is the bitwise OR of every source that has ever told us
  * about it.
@@ -35,7 +35,7 @@ object PeerSource {
 }
 
 /**
- * The "peer exchange" hint flags that can accompany a peer when it is added —
+ * The "peer exchange" hint flags that can accompany a peer when it is added:
  * the port of the `pex_flags_t` constants in
  * `include/libtorrent/pex_flags.hpp`.
  *
@@ -64,7 +64,7 @@ object PexFlags {
 }
 
 /**
- * Compute the *source rank* of a peer's [source] bitmap — the port of
+ * Compute the *source rank* of a peer's [source] bitmap: the port of
  * `int source_rank(peer_source_flags_t)` from `src/request_blocks.cpp`.
  *
  * This collapses the (multi-bit) source bitmap into a small priority number used
@@ -74,8 +74,8 @@ object PexFlags {
  * sources contribute nothing (rank 0).
  *
  * The exact bit layout (`1<<5` for tracker down to `1<<2` for PEX) is reproduced
- * verbatim so that the relative magnitudes — and therefore the connect ordering
- * — match libtorrent precisely.
+ * verbatim so that the relative magnitudes (and therefore the connect ordering)
+ * match libtorrent precisely.
  */
 fun sourceRank(source: Int): Int {
     var ret = 0

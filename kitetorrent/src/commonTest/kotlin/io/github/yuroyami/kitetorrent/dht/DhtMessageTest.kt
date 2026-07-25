@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 
 /**
  * Tests for the DHT KRPC codec ([DhtMessage], [CompactNodes]/[DhtEndpoint]) and the
- * in-memory [DhtStorage] — the ports of `src/kademlia/{node,msg,dht_storage}.cpp`
+ * in-memory [DhtStorage]: the ports of `src/kademlia/{node,msg,dht_storage}.cpp`
  * and the `find_data`/`get_peers`/`get_item`/`put_data` query builders.
  *
  * Round-trips go through the real [Bencode]/[Bdecode] codec so the bytes exercised

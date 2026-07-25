@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 /**
  * BitTorrent v2 (BEP-52) end-to-end: two engines exchange a **v2-only** torrent. Every
  * piece is verified by recomputing its SHA-256 merkle root from the 16 KiB block leaves
- * and matching the published `piece layers` — there is no v1 SHA-1 anywhere. Also exercises
+ * and matching the published `piece layers`. There is no v1 SHA-1 anywhere. Also exercises
  * the truncated-v2 wire info-hash on the handshake and inbound routing. Plaintext, to keep
  * v2 isolated from MSE (covered separately).
  */
@@ -66,7 +66,7 @@ class V2ExchangeTest {
         assertTrue(torrent.isV2 && !torrent.isV1, "must be a pure v2 torrent")
         val workers = CoroutineScope(coroutineContext + SupervisorJob())
 
-        // seeder: disk pre-filled with the whole torrent — recheck must claim every piece via v2
+        // seeder: disk pre-filled with the whole torrent. Recheck must claim every piece via v2
         val seederDisk = InMemoryDiskIo(torrent.storage)
         var off = 0
         for (p in 0 until torrent.numPieces) {

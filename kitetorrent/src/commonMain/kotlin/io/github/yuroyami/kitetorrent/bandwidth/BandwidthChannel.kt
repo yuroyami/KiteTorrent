@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.bandwidth
 
 /**
- * A single token bucket — pure-Kotlin port of libtorrent's `bandwidth_channel`
+ * A single token bucket. This is a pure-Kotlin port of libtorrent's `bandwidth_channel`
  * (aux_/bandwidth_limit.hpp, bandwidth_limit.cpp).
  *
  * Each channel enforces one rate limit (bytes/second). A peer connection belongs
@@ -15,8 +15,8 @@ package io.github.yuroyami.kitetorrent.bandwidth
  * Consumers withdraw with [useQuota] and refund unused quota on disconnect with
  * [returnQuota].
  *
- * A [limit] of `0` means *infinite* (unlimited) — such a channel always reports
- * [inf] quota and ignores [updateQuota] / [useQuota] / [returnQuota].
+ * A [limit] of `0` means *infinite* (unlimited). Such a channel always reports
+ * [inf] quota and ignores [updateQuota], [useQuota] and [returnQuota].
  *
  * The fields [tmp] and [distributeQuota] are scratch space owned by the manager
  * during a distribution round; see [BandwidthManager.updateQuotas].
@@ -40,7 +40,7 @@ class BandwidthChannel {
 
     /**
      * Sets the rate limit to [value] bytes/second; `0` means infinite. Must be in
-     * `0 until inf` — at or beyond [inf] the token-bucket math could overflow.
+     * `0 until inf`: at or beyond [inf] the token-bucket arithmetic could overflow.
      */
     fun throttle(value: Int) {
         require(value >= 0) { "throttle limit must be non-negative, was $value" }
@@ -89,7 +89,7 @@ class BandwidthChannel {
     }
 
     /**
-     * Refunds [amount] bytes to the bucket — used when a consumer disconnects with
+     * Refunds [amount] bytes to the bucket. Call it when a consumer disconnects with
      * quota it never spent. No-op on an unlimited channel. (`return_quota`)
      */
     fun returnQuota(amount: Int) {
@@ -118,7 +118,7 @@ class BandwidthChannel {
     }
 
     companion object {
-        /** Sentinel for "infinite" quota / limit — `int32` max, as in libtorrent. */
+        /** Sentinel for "infinite" quota or limit (`int32` max, as in libtorrent). */
         const val inf: Int = Int.MAX_VALUE
     }
 }

@@ -6,8 +6,8 @@ package io.github.yuroyami.kitetorrent.alert
  *
  * In libtorrent this holds a `torrent_handle`; KiteTorrent v0 has no handle type
  * yet, so it carries just the torrent's display [torrentName] (which is all the
- * C++ `message()` actually renders — `torrent_alert::message()` returns
- * `torrent_name()`, or `" - "` when the handle is invalid).
+ * C++ `message()` renders: `torrent_alert::message()` returns `torrent_name()`, or
+ * `" - "` when the handle is invalid).
  *
  * @property torrentName the torrent's name, or `null` when the handle would be
  *   invalid (rendered as `" - "`, matching libtorrent).

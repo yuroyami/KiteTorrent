@@ -8,7 +8,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 
 /**
- * UPnP IGD port mapping — port of the SSDP-discovery + SOAP-control half of
+ * UPnP IGD port mapping: a port of the SSDP-discovery + SOAP-control half of
  * libtorrent's `upnp` (upnp.cpp). Opens an inbound port on a NAT gateway so peers can
  * reach us. SSDP runs over UDP multicast; the control step is plain SOAP-over-HTTP.
  *
@@ -16,10 +16,10 @@ import io.ktor.client.statement.bodyAsText
  * [resolveControlUrl], [addPortMappingBody], [deletePortMappingBody]) are total
  * functions of their arguments with no I/O. The driver functions ([discover],
  * [describe], [openIgd], [mapTcpAndUdp], [removeMapping], …) layer the UDP/HTTP
- * round-trips on top — the engine schedules them (initial map plus a lease-refresh
+ * round-trips on top. The engine schedules them (initial map plus a lease-refresh
  * timer); this file owns the protocol.
  *
- * XML is built/scanned as strings (no XML library — the documents are tiny and fixed),
+ * XML is built/scanned as strings (no XML library, because the documents are tiny and fixed),
  * exactly as libtorrent does with its hand-rolled `xml_parse` / `find_control_url`.
  */
 object Upnp {
@@ -28,7 +28,7 @@ object Upnp {
     const val SSDP_PORT = 1900
     const val IGD_DEVICE = "urn:schemas-upnp-org:device:InternetGatewayDevice:1"
 
-    /** WANIPConnection v1 — the default service type libtorrent emits in SOAP. */
+    /** WANIPConnection v1: the default service type libtorrent emits in SOAP. */
     const val WAN_IP_SERVICE = "urn:schemas-upnp-org:service:WANIPConnection:1"
 
     /**
@@ -140,8 +140,8 @@ object Upnp {
                                 serviceType = v
                             }
                         }
-                        // <service>…<controlURL>…</controlURL></service> — only once we
-                        // are inside the accepted service block, mirroring `in_service`.
+                        // <service>…<controlURL>…</controlURL></service>, matched only once
+                        // we are inside the accepted service block, mirroring `in_service`.
                         controlUrl == null && inService && serviceType != null &&
                             parent == "controlurl" && grandparent == "service" -> {
                             val v = t.value.trim()
@@ -408,9 +408,9 @@ object Upnp {
 
     /**
      * (Re)map both the TCP and UDP halves of a peer port on the gateway described by
-     * [igd]. Idempotent — re-issuing the same AddPortMapping refreshes the lease (this is
-     * exactly how the engine's lease-refresh timer keeps the mapping alive, mirroring
-     * `upnp::update_map` re-adding before expiry).
+     * [igd]. The call is idempotent: re-issuing the same AddPortMapping refreshes the
+     * lease (this is exactly how the engine's lease-refresh timer keeps the mapping alive,
+     * mirroring `upnp::update_map` re-adding before expiry).
      *
      * Returns an [UpnpMapping] handle recording which protocols succeeded; the engine
      * keeps it to drive [removeMapping] on shutdown and to schedule the next refresh

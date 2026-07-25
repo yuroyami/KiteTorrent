@@ -7,7 +7,7 @@ import kotlin.coroutines.startCoroutine
 /**
  * A fully in-memory [ByteStream] duplex for driving a [PeerConnection] in tests with
  * no sockets. The two directions are independent:
- *  - [inbound] is the byte stream the connection *reads* — preload it with bytes the
+ *  - [inbound] is the byte stream the connection *reads*. Preload it with bytes the
  *    fake "peer" sends (handshake, messages). [readExactly] serves from here.
  *  - [written] accumulates everything the connection *writes*, so a test can assert
  *    on the exact frames it emitted.
@@ -55,7 +55,7 @@ class ByteArrayOut {
 }
 
 /**
- * Run a suspend [block] that is expected to complete synchronously — i.e. it never
+ * Run a suspend [block] that is expected to complete synchronously, i.e. it never
  * suspends on anything but already-satisfiable work (our [FakeDuplex] never parks).
  * This avoids a dependency on kotlinx-coroutines-test (`runTest`), which is not on
  * the session module's test classpath, while still exercising the real suspend code

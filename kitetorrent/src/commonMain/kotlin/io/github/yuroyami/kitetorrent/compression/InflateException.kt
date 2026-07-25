@@ -18,49 +18,49 @@ package io.github.yuroyami.kitetorrent.compression
  * the human-readable text is what libtorrent shows to callers.
  */
 enum class InflateError(val code: Int, val message: String) {
-    /** puff 2 — `bits()`/`decode()` ran off the end of the input (longjmp path). */
+    /** puff 2: `bits()`/`decode()` ran off the end of the input (longjmp path). */
     DATA_DID_NOT_TERMINATE(2, "available inflate data did not terminate"),
 
-    /** puff 1 — only reachable with a bounded output buffer; we grow instead. */
+    /** puff 1: only reachable with a bounded output buffer; we grow instead. */
     SPACE_EXHAUSTED(1, "output space exhausted before completing inflate"),
 
-    /** puff -1 — block type field was 3 (reserved). */
+    /** puff -1: block type field was 3 (reserved). */
     INVALID_BLOCK_TYPE(-1, "invalid block type (type == 3)"),
 
-    /** puff -2 — stored block LEN did not match ~LEN. */
+    /** puff -2: stored block LEN did not match ~LEN. */
     INVALID_STORED_BLOCK_LENGTH(-2, "stored block length did not match one's complement"),
 
-    /** puff -3 — dynamic header declared more codes than the format allows. */
+    /** puff -3: dynamic header declared more codes than the format allows. */
     TOO_MANY_LENGTH_OR_DISTANCE_CODES(-3, "dynamic block code description: too many length or distance codes"),
 
-    /** puff -4 — the code-length code itself was not a complete set. */
+    /** puff -4: the code-length code itself was not a complete set. */
     CODE_LENGTHS_CODES_INCOMPLETE(-4, "dynamic block code description: code lengths codes incomplete"),
 
-    /** puff -5 — a repeat-previous (16) instruction with no previous length. */
+    /** puff -5: a repeat-previous (16) instruction with no previous length. */
     REPEAT_LENGTHS_WITH_NO_FIRST_LENGTH(-5, "dynamic block code description: repeat lengths with no first length"),
 
-    /** puff -6 — a run-length instruction overran the declared symbol count. */
+    /** puff -6: a run-length instruction overran the declared symbol count. */
     REPEAT_MORE_THAN_SPECIFIED_LENGTHS(-6, "dynamic block code description: repeat more than specified lengths"),
 
-    /** puff -7 — literal/length code lengths formed an invalid (over/incomplete) set. */
+    /** puff -7: literal/length code lengths formed an invalid (over/incomplete) set. */
     INVALID_LITERAL_LENGTH_CODE_LENGTHS(-7, "dynamic block code description: invalid literal/length code lengths"),
 
-    /** puff -8 — distance code lengths formed an invalid set. */
+    /** puff -8: distance code lengths formed an invalid set. */
     INVALID_DISTANCE_CODE_LENGTHS(-8, "dynamic block code description: invalid distance code lengths"),
 
-    /** puff -9 — the dynamic block had no end-of-block symbol. */
+    /** puff -9: the dynamic block had no end-of-block symbol. */
     MISSING_END_OF_BLOCK_CODE(-9, "dynamic block code description: missing end-of-block code"),
 
-    /** puff -10 — an invalid Huffman code was decoded in a fixed/dynamic block. */
+    /** puff -10: the decoder hit an invalid Huffman code in a fixed/dynamic block. */
     INVALID_LITERAL_OR_DISTANCE_CODE(-10, "invalid literal/length or distance code in fixed or dynamic block"),
 
-    /** puff -11 — a back-reference distance pointed before the start of output. */
+    /** puff -11: a back-reference distance pointed before the start of output. */
     DISTANCE_TOO_FAR_BACK(-11, "distance is too far back in fixed or dynamic block"),
 
-    /** gzip-level — the gzip header magic/method/flags were malformed. */
+    /** gzip-level: the gzip header magic/method/flags were malformed. */
     INVALID_GZIP_HEADER(100, "invalid gzip header"),
 
-    /** gzip-level — inflated output would exceed the caller-supplied maximum. */
+    /** gzip-level: inflated output would exceed the caller-supplied maximum. */
     INFLATED_DATA_TOO_LARGE(101, "inflated data too large"),
 
     /** Catch-all, matching libtorrent's `unknown_gzip_error`. */

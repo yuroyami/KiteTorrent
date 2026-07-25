@@ -9,8 +9,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Tests for [RoutingTable] and the free functions in `RoutingTable.kt` — the port
- * of `src/kademlia/routing_table.cpp`.
+ * Tests for [RoutingTable] and the free functions in `RoutingTable.kt`, the port of
+ * `src/kademlia/routing_table.cpp`.
  *
  * Most structural tests run with `restrictRoutingIps`, `preferVerifiedNodeIds`
  * and `enforceNodeId` all disabled, and the extended routing table off, so we can
@@ -50,7 +50,7 @@ class RoutingTableTest {
 
     @Test
     fun classifyPrefixGoldenVectors() {
-        // bucket_idx=8, last_bucket=true, bucket_size=8 — second nibble of byte 1.
+        // bucket_idx=8, last_bucket=true, bucket_size=8: the second nibble of byte 1.
         assertEquals(0, classifyPrefix(8, true, 8, hash("dc0cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc")))
         assertEquals(1, classifyPrefix(8, true, 8, hash("dc2cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc")))
         assertEquals(2, classifyPrefix(8, true, 8, hash("dc4cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdc")))
@@ -94,7 +94,7 @@ class RoutingTableTest {
         assertTrue(allInSameBucket(emptyList(), hash("8000000000000000000000000000000000000001"), 1))
 
         // candidate has bit 0 set (0x80...), and an entry with bit 0 clear
-        // (0x00...) — they're on opposite sides at bit 0, so NOT all-in-same.
+        // (0x00...). They are on opposite sides at bit 0, so NOT all-in-same.
         val mixed = listOf(NodeEntry(hash("0000000000000000000000000000000000000000"), "1.2.3.4", 1))
         assertFalse(allInSameBucket(mixed, hash("8000000000000000000000000000000000000000"), 0))
 
@@ -150,7 +150,7 @@ class RoutingTableTest {
         val nid = hash("8000000000000000000000000000000000000000")
         val refresh = table.nodeSeen(nid, "4.4.4.4", 4, 10)
         // first node into an empty table: added (return value here is whether the
-        // table wants a refresh; for a single far node it may be false — we only
+        // table wants a refresh; for a single far node it may be false, so we only
         // assert the node landed).
         assertEquals(1, table.size().first)
         assertFalse(table.needBootstrap())

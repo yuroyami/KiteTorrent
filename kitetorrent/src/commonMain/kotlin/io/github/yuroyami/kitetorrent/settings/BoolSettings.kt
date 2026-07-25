@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.settings
 
 /**
- * The boolean-typed session settings — port of `settings_pack::bool_types`
+ * The boolean-typed session settings, the port of `settings_pack::bool_types`
  * (`settings_pack.hpp`) together with the `bool_settings` default-value table from
  * `settings_pack.cpp`.
  *

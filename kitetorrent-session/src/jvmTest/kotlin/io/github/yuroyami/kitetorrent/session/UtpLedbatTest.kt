@@ -12,11 +12,11 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * LEDBAT proof — the uplink-friendly behaviour. Driving the real congestion controller
+ * LEDBAT proof: the uplink-friendly behaviour. Driving the real congestion controller
  * with peer-reported one-way delay: when queuing delay sits below the 100 ms target the
  * window opens up, and when it climbs above the target the window backs off. That delay-
  * driven retreat is exactly what lets uTP yield to other traffic instead of clogging the
- * uplink — the whole point of uTP over TCP.
+ * uplink. That is the reason to use uTP instead of TCP.
  */
 class UtpLedbatTest {
 

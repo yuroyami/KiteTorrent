@@ -12,7 +12,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * BEP-9 `ut_metadata` codec tests — verifies the exact wire bytes against
+ * BEP-9 `ut_metadata` codec tests. They verify the exact wire bytes against
  * hand-computed bencode golden vectors and round-trips request / data / reject,
  * including the raw piece bytes appended after a `data` message's dict.
  */
@@ -130,7 +130,7 @@ class UtMetadataTest {
 
 /**
  * [MetadataTransfer] reassembly + info-hash verification tests. The "metadata" here
- * is an arbitrary byte blob standing in for a bencoded `info` dict — what matters
+ * is an arbitrary byte blob standing in for a bencoded `info` dict. What matters
  * for the codec is that the reassembled bytes hash to the expected info-hash, which
  * is exactly what `torrent::set_metadata` checks in libtorrent.
  */

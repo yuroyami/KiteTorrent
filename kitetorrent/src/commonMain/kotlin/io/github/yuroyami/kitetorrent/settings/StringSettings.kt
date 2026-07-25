@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.settings
 import io.github.yuroyami.kitetorrent.Version
 
 /**
- * The string-typed session settings — port of `settings_pack::string_types`
+ * The string-typed session settings: port of `settings_pack::string_types`
  * (`settings_pack.hpp`) together with the `str_settings` default-value table from
  * `settings_pack.cpp`.
  *

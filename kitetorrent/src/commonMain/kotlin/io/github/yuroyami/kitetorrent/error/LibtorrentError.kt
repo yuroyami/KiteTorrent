@@ -11,7 +11,7 @@ package io.github.yuroyami.kitetorrent.error
  * and the [message] string that `libtorrent_category().message(code)` returns.
  *
  * The integer values are part of libtorrent's ABI and are referenced by other
- * subsystems, so they are preserved faithfully — including the gaps left by
+ * subsystems, so this enum preserves them faithfully, including the gaps left by
  * deprecated NAT-PMP codes (120-124), the reserved ranges, and the version-1
  * ABI-only bdecode codes (190-196). Those gaps are represented here as
  * `RESERVED_n` / `DEPRECATED_n` placeholders so that [entries] stays a dense,

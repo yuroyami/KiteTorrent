@@ -13,7 +13,7 @@ import kotlin.test.assertEquals
 
 /**
  * uTP flow control: the sender never keeps more bytes in flight than the peer's advertised
- * receive window. The effective send window is min(cwnd, peer-window) — so a small advertised
+ * receive window. The effective send window is min(cwnd, peer-window), so a small advertised
  * window binds below the congestion window, and a large one lets the congestion window rule.
  * Previously the peer's `wnd_size` was ignored, which could overrun a slow receiver.
  */

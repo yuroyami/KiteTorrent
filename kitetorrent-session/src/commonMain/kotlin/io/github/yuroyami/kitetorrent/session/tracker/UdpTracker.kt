@@ -9,7 +9,7 @@ import kotlinx.coroutines.withTimeout
 import kotlin.random.Random
 
 /**
- * A BEP-15 UDP tracker client — the live half of libtorrent's
+ * A BEP-15 UDP tracker client: the live half of libtorrent's
  * `udp_tracker_connection` (`src/udp_tracker_connection.cpp`), driven over the
  * proven [UdpSocket]. The fixed-layout packet build/parse lives in
  * [UdpTrackerCodec]; this class owns the *transaction*: the mandatory two-step
@@ -19,10 +19,10 @@ import kotlin.random.Random
  * libtorrent retransmits a UDP request a few times with a growing timeout before
  * giving up (`tracker_completion_timeout` / `tracker_receive_timeout`). We do the
  * same: each request is attempted up to [maxAttempts] times, with the per-attempt
- * receive bounded by an exponentially growing timeout starting at [baseTimeoutMs]
- * — the BEP-15 recommended `15 * 2^n` back-off, capped so a single announce cannot
- * hang the caller. Cancellation propagates through structured concurrency: cancel
- * the calling coroutine and every `receive()` unwinds.
+ * receive bounded by an exponentially growing timeout starting at [baseTimeoutMs].
+ * That is the BEP-15 recommended `15 * 2^n` back-off, capped so a single announce
+ * cannot block the caller indefinitely. Cancellation propagates through structured
+ * concurrency: cancel the calling coroutine and every `receive()` unwinds.
  *
  * BEP-15 caches a tracker's `connection_id` for ~60 seconds; libtorrent keeps a
  * process-wide `m_connection_cache` keyed by tracker address. We keep an
@@ -30,7 +30,7 @@ import kotlin.random.Random
  * [announce]/[scrape] until it expires after [connectionIdTtlMs].
  *
  * @property udp the bound UDP socket to send from and receive on. Ownership stays
- *   with the caller — this class never closes it.
+ *   with the caller. This class never closes it.
  * @property random the source of transaction ids (and so, indirectly, of the
  *   anti-spoofing guarantee). Inject a seeded [Random] in tests.
  */
@@ -115,11 +115,11 @@ class UdpTracker(
      * response of [expectedAction] for [transactionId], retransmitting up to
      * [maxAttempts] times with a growing per-attempt timeout.
      *
-     * This is the heart of the UDP transaction loop. Within one attempt we keep
-     * draining [UdpSocket.receive] — discarding datagrams whose transaction id does
-     * not match (the spoofing/late-reply guard from `on_receive`) — until either the
-     * matching response arrives, a tracker error packet arrives (surfaced as a
-     * [TorrentException]), or the attempt's timeout elapses and we retransmit.
+     * This method drives the UDP transaction loop. Within one attempt we keep
+     * draining [UdpSocket.receive], discarding datagrams whose transaction id does
+     * not match (the spoofing/late-reply guard from `on_receive`). We stop when the
+     * matching response arrives, when a tracker error packet arrives (surfaced as a
+     * [TorrentException]), or when the attempt's timeout elapses and we retransmit.
      */
     private suspend fun transact(
         host: String,
@@ -140,15 +140,15 @@ class UdpTracker(
             if (reply != null) {
                 // a BEP-15 error packet maps to errors::tracker_failure, exactly as
                 // udp_tracker_connection::on_receive does. The tracker's human-readable
-                // message (reply.errorMessage) is informational only — libtorrent merely
-                // logs it — so the carried error is the faithful error code.
+                // message (reply.errorMessage) is informational only, and libtorrent
+                // merely logs it, so the carried error is the faithful error code.
                 if (reply.isError) throw TorrentException(LibtorrentError.TRACKER_FAILURE)
                 return reply.packet
             }
             attempt++
             timeout *= 2
         }
-        // exhausted all retransmissions — errors::timed_out, as in on_timeout
+        // exhausted all retransmissions: errors::timed_out, as in on_timeout
         throw TorrentException(LibtorrentError.TIMED_OUT)
     }
 
@@ -177,7 +177,7 @@ class UdpTracker(
                     return Reply(packet, isError = false, errorMessage = null)
                 }
             }
-            // otherwise: stray/late/spoofed datagram — ignore and keep waiting
+            // otherwise: a stray, late or spoofed datagram. Ignore it and keep waiting.
         }
     }
 
@@ -205,7 +205,7 @@ class UdpTracker(
     /**
      * Whether [host] is an IPv6 literal, used to choose the BEP-15 compact-peer stride
      * (18 bytes for v6, 6 for v4). An IPv6 literal is the only host form that contains a
-     * colon — IPv4 dotted-quads and DNS names never do — so a `:` is a sufficient test.
+     * colon (IPv4 dotted-quads and DNS names never do), so a `:` is a sufficient test.
      * A bracketed literal (`[2001:db8::1]`) also qualifies.
      */
     private fun isIpv6Host(host: String): Boolean = host.indexOf(':') >= 0

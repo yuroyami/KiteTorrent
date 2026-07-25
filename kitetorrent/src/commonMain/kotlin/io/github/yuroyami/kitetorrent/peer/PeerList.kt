@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.peer
 import kotlin.random.Random
 
 /**
- * State the owning torrent passes into [PeerList] operations — the port of
+ * State the owning torrent passes into [PeerList] operations. This is the port of
  * `struct torrent_state` (`include/libtorrent/peer_list.hpp`).
  *
  * libtorrent deliberately routes the small amount of torrent/session context the
@@ -26,7 +26,7 @@ class TorrentState {
     /** Whether multiple connections to the same IP (different ports) are allowed. */
     var allowMultipleConnectionsPerIp: Boolean = false
 
-    /** Output: set by [PeerList.addPeer] — true iff the peer was newly added. */
+    /** Output: set by [PeerList.addPeer]. True iff the peer was newly added. */
     var firstTimeSeen: Boolean = false
 
     /** Maximum number of peers to keep in the list before weeding. 0 = unlimited. */
@@ -60,7 +60,7 @@ class TorrentState {
 }
 
 /**
- * The set of known peers for one torrent — the pure-Kotlin port of libtorrent's
+ * The set of known peers for one torrent. This is the pure-Kotlin port of libtorrent's
  * `struct peer_list` (`include/libtorrent/peer_list.hpp`, `src/peer_list.cpp`).
  *
  * This is a **pure data structure**: it owns no sockets and performs no I/O. Its
@@ -72,7 +72,7 @@ class TorrentState {
  *
  * ### What is ported faithfully
  *  - the connect-candidate predicate [isConnectCandidate],
- *  - the candidate **ranking** ([comparePeer] / [findConnectCandidates]) — lower
+ *  - the candidate **ranking** ([comparePeer], [findConnectCandidates]): lower
  *    failcount first, local peers first, least-recently-tried first, then source
  *    rank and BEP 40 peer rank,
  *  - dedupe-on-insert keyed by endpoint, with the peer vector kept sorted by
@@ -98,8 +98,8 @@ class PeerList {
 
     /**
      * The peers, kept sorted by [PeerAddress] ascending (IPv4 before IPv6, then
-     * unsigned-lexicographic) so that dedupe and lookup are binary searches —
-     * mirroring `m_peers` and `peer_address_compare`. Peers whose host is not a
+     * unsigned-lexicographic) so that dedupe and lookup are binary searches. This
+     * mirrors `m_peers` and `peer_address_compare`. Peers whose host is not a
      * literal IP ([TorrentPeer.address] == null) sort after all literal ones and
      * are deduped by host:port via a linear fallback.
      */
@@ -159,7 +159,7 @@ class PeerList {
     // ---- connect-candidate predicate ---------------------------------------
 
     /**
-     * Whether [p] is a connect candidate — the port of
+     * Whether [p] is a connect candidate. This is the port of
      * `peer_list::is_connect_candidate`. A peer is *not* a candidate if it is
      * already connected, banned, a web seed, not connectable, a seed while we are
      * finished, or has failed too many times. Everything else is a candidate.
@@ -184,8 +184,8 @@ class PeerList {
     // ---- finding / inserting peers -----------------------------------------
 
     /**
-     * Add (or merge) a peer learned for `(host, port)` from [source] — the port of
-     * the IP path of `peer_list::add_peer`. Returns the stored [TorrentPeer]
+     * Add (or merge) a peer learned for `(host, port)` from [source]. This is the port
+     * of the IP path of `peer_list::add_peer`. Returns the stored [TorrentPeer]
      * (existing or freshly created), or `null` if the endpoint is rejected.
      *
      * Faithful behaviours:
@@ -277,7 +277,7 @@ class PeerList {
 
     /**
      * Insert a brand-new peer into the sorted vector, applying [pexFlags] and the
-     * list-size cap — the port of `peer_list::insert_peer`. Returns false if the
+     * list-size cap. This is the port of `peer_list::insert_peer`. Returns false if the
      * peer could not be inserted (list full and weeding couldn't make room, or the
      * peer's only source is resume data and the list is full).
      */
@@ -312,7 +312,7 @@ class PeerList {
     }
 
     /**
-     * Merge new information into an already-known peer — the port of
+     * Merge new information into an already-known peer. This is the port of
      * `peer_list::update_peer`. Marks it connectable, refreshes its [port],
      * accumulates the [source] bit, decrements failcount once if the news came
      * from a tracker (somebody can evidently reach it), folds in [pexFlags], and
@@ -335,7 +335,7 @@ class PeerList {
     }
 
     /**
-     * Update a connected peer's advertised listen [port] — the simplified port of
+     * Update a connected peer's advertised listen [port]. This is the simplified port of
      * `peer_list::update_peer_port` (the single-connection-per-IP path). Returns
      * false on a duplicate-endpoint collision (caller should drop the connection),
      * true otherwise. Marks the peer connectable and folds in [src].
@@ -372,7 +372,7 @@ class PeerList {
     // ---- mutators that touch candidate bookkeeping --------------------------
 
     /**
-     * Ban [p] — the port of `peer_list::ban_peer`. A banned peer is removed from
+     * Ban [p], the port of `peer_list::ban_peer`. A banned peer is removed from
      * the connect-candidate count and can never become a candidate again. Returns
      * true (upstream always reports the ban as applied).
      */
@@ -383,7 +383,7 @@ class PeerList {
     }
 
     /**
-     * Mark [p] as connected or not — the candidate-bookkeeping core of
+     * Mark [p] as connected or not. This is the candidate-bookkeeping core of
      * `peer_list::set_connection` (when connecting) and `connection_closed`'s
      * pointer clearing. Setting connected clears the [TorrentPeer.maybeUploadOnly]
      * hint (we will soon learn the truth) and removes the peer from the candidate
@@ -399,7 +399,7 @@ class PeerList {
     }
 
     /**
-     * Record that a connection to [p] just closed — the port of the bookkeeping in
+     * Record that a connection to [p] just closed. This is the port of the bookkeeping in
      * `peer_list::connection_closed`. Clears the connected flag and optimistic
      * unchoke, optionally stamps [lastConnected] with [sessionTime], bumps the
      * failcount when [failed], and re-counts the peer as a candidate if it now is
@@ -428,7 +428,7 @@ class PeerList {
     }
 
     /**
-     * Increment [p]'s failcount (saturating at 31) — the port of
+     * Increment [p]'s failcount (saturating at 31). This is the port of
      * `peer_list::inc_failcount`. Updates the candidate count if this pushes the
      * peer past [maxFailcount].
      */
@@ -440,8 +440,8 @@ class PeerList {
     }
 
     /**
-     * Set [p]'s failcount to [f] — the port of `peer_list::set_failcount`,
-     * adjusting the candidate count in whichever direction the change implies.
+     * Set [p]'s failcount to [f], the port of `peer_list::set_failcount`. It adjusts
+     * the candidate count in whichever direction the change implies.
      */
     fun setFailcount(p: TorrentPeer, f: Int) {
         val wasCand = isConnectCandidate(p)
@@ -452,7 +452,7 @@ class PeerList {
     }
 
     /**
-     * Set [p]'s seed flag — the port of `peer_list::set_seed`. Maintains both the
+     * Set [p]'s seed flag, the port of `peer_list::set_seed`. It maintains both the
      * connect-candidate count (a seed is not a candidate when we're finished) and
      * the [numSeeds] tally.
      */
@@ -466,7 +466,7 @@ class PeerList {
         if (s) seedCount++ else seedCount--
     }
 
-    /** Clear every cached peer rank — the port of `peer_list::clear_peer_prio`. */
+    /** Clear every cached peer rank, the port of `peer_list::clear_peer_prio`. */
     fun clearPeerPrio() {
         for (p in peers) p.peerRank = 0
     }
@@ -474,8 +474,8 @@ class PeerList {
     // ---- erase --------------------------------------------------------------
 
     /**
-     * Remove [p] from the list, fixing up every counter and cursor — the port of
-     * `peer_list::erase_peer(torrent_peer*)`. The removed peer is appended to
+     * Remove [p] from the list, correcting every counter and cursor. This is the port
+     * of `peer_list::erase_peer(torrent_peer*)`. The removed peer is appended to
      * [TorrentState.erased]. No-op if [p] is not present.
      */
     fun erasePeer(p: TorrentPeer, state: TorrentState) {
@@ -509,7 +509,7 @@ class PeerList {
 
     /**
      * Weed the list down toward 95% of [TorrentState.maxPeerlistSize] when it has
-     * grown too large — the port of `peer_list::erase_peers`. Scans up to 300
+     * grown too large. This is the port of `peer_list::erase_peers`. It scans up to 300
      * peers from a random cursor, picks the best erase candidate via
      * [comparePeerErase] (and erases resume-data-only peers immediately), and as a
      * last resort, if [forceErase] is set, drops the best force-erase candidate.
@@ -569,7 +569,7 @@ class PeerList {
 
     /**
      * Recompute the connect-candidate count from scratch and snapshot the
-     * finished / max-failcount state — the port of
+     * finished and max-failcount state. This is the port of
      * `peer_list::recalculate_connect_candidates`. Called whenever the finished
      * state flips or the failcount threshold changes, since both alter which
      * peers count.
@@ -588,8 +588,8 @@ class PeerList {
     }
 
     /**
-     * Build a small, ranked list of the best connect candidates into [out] — the
-     * port of `peer_list::find_connect_candidates`. Scans up to 300 peers from the
+     * Build a small, ranked list of the best connect candidates into [out]. This is
+     * the port of `peer_list::find_connect_candidates`. Scans up to 300 peers from the
      * round-robin cursor, skips peers that are not candidates or are still within
      * their reconnect back-off window, and keeps the best 10 sorted by
      * [comparePeer]. Also opportunistically weeds the list while scanning if it is
@@ -695,7 +695,7 @@ class PeerList {
 
     /**
      * Return the single best peer to try to connect to next, or `null` if there is
-     * none — the port of `peer_list::connect_one_peer`. Maintains a cache of
+     * none. This is the port of `peer_list::connect_one_peer`. It maintains a cache of
      * pre-ranked candidates: stale entries (no longer candidates) are dropped, the
      * cache is refilled via [findConnectCandidates] when empty, and the front (best)
      * peer is popped and returned. The returned peer is guaranteed to be a current
@@ -724,7 +724,7 @@ class PeerList {
     // ---- comparators --------------------------------------------------------
 
     /**
-     * True if [lhs] is a **better connect candidate** than [rhs] — the port of the
+     * True if [lhs] is a **better connect candidate** than [rhs]. This is the port of the
      * file-local `compare_peer` in `src/peer_list.cpp`. The ordering, in priority
      * order:
      *  1. lower [failcount] wins;
@@ -767,7 +767,7 @@ class PeerList {
 
     /**
      * True if [lhs] is a **better erase candidate** than [rhs] (i.e. should be
-     * dropped first) — the port of the file-local `compare_peer_erase`. Priority:
+     * dropped first). This is the port of the file-local `compare_peer_erase`. Priority:
      *  1. higher [failcount] is dropped first;
      *  2. a peer whose only source is resume data is dropped first;
      *  3. a non-[connectable] peer is dropped first;

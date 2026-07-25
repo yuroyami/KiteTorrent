@@ -4,7 +4,7 @@ import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
 
 /**
  * Pure big-endian (network byte order) packet build/parse for the BEP-15 UDP
- * tracker protocol — the codec half of libtorrent's `udp_tracker_connection`
+ * tracker protocol: the codec half of libtorrent's `udp_tracker_connection`
  * (`src/udp_tracker_connection.cpp`). Every function here is a total function of
  * its [ByteArray] argument(s): no sockets, no coroutines, no I/O. [UdpTracker]
  * layers the connect→announce transaction and the actual datagram round-trips on
@@ -126,8 +126,8 @@ internal object UdpTrackerCodec {
      * which ignores packets shorter than 16 bytes.
      *
      * Returns `null` if the packet is too short, the action is not `connect`, or the
-     * transaction id does not match [expectedTransactionId] — all of which
-     * libtorrent treats as "ignore this datagram".
+     * transaction id does not match [expectedTransactionId]. libtorrent treats every
+     * one of those cases as "ignore this datagram".
      */
     fun parseConnectResponse(packet: ByteArray, expectedTransactionId: Int): ConnectResult? {
         if (packet.size < CONNECT_PACKET_SIZE) return null

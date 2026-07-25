@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.torrent
 import io.github.yuroyami.kitetorrent.Sha256Hash
 
 /**
- * One file within a torrent — port of the per-file data libtorrent keeps in
+ * One file within a torrent: port of the per-file data libtorrent keeps in
  * `file_storage` (file_storage.hpp). [offset] is the file's start within the
  * torrent's single concatenated byte stream, which is what maps pieces to files.
  */
@@ -32,12 +32,12 @@ class FileEntry(
 }
 
 /**
- * The set of files in a torrent and the geometry that ties them to pieces — port of
+ * The set of files in a torrent and the geometry that ties them to pieces: port of
  * libtorrent's `file_storage`. For a single-file torrent there is exactly one entry
  * whose path is the torrent name.
  */
 class FileStorage internal constructor(
-    /** The torrent name — the file name for single-file, the root directory for multi-file. */
+    /** The torrent name: the file name for single-file, the root directory for multi-file. */
     val name: String,
     /** Piece size in bytes (a power of two for well-formed torrents). */
     val pieceLength: Int,
@@ -61,9 +61,9 @@ class FileStorage internal constructor(
 
     // --- per-file piece mapping (BEP-52 / hybrid alignment view) -------------
     //
-    // In a v2 / hybrid torrent every (non-pad) file begins on a piece boundary —
-    // pad files in the v1 list, and the v2 file tree's natural per-file trees,
-    // enforce this. libtorrent exposes this through file_storage::file_index_at_piece,
+    // In a v2 / hybrid torrent every (non-pad) file begins on a piece boundary. Pad
+    // files in the v1 list, and the v2 file tree's natural per-file trees, enforce
+    // this. libtorrent exposes this through file_storage::file_index_at_piece,
     // map_file, file_piece_range, etc. The classic v1-flat geometry (numPieces over
     // the concatenated stream) is preserved above; this is the additive aligned view.
     //
@@ -79,7 +79,7 @@ class FileStorage internal constructor(
     }
 
     /**
-     * The file index that owns the byte range at the *start* of piece [piece] — port of
+     * The file index that owns the byte range at the *start* of piece [piece]: port of
      * `file_storage::file_index_at_piece`. For v2/hybrid (piece-aligned) torrents this is
      * the file the whole piece belongs to. Returns -1 for an out-of-range piece or when
      * there are no files. Pad files are included (they occupy real pieces in the layout).
@@ -113,9 +113,9 @@ class FileStorage internal constructor(
 
     /**
      * The inclusive..exclusive piece range covering file [fileIndex], as an [IntRange] over
-     * `[firstPiece, lastPiece]` (last piece is the one containing the file's final byte) —
-     * analogous to `file_storage::file_piece_range`. Empty (e.g. `0 until 0` → `IntRange.EMPTY`)
-     * for a zero-length file.
+     * `[firstPiece, lastPiece]` (last piece is the one containing the file's final byte).
+     * This is analogous to `file_storage::file_piece_range`. The range is empty (e.g.
+     * `0 until 0` → `IntRange.EMPTY`) for a zero-length file.
      */
     fun pieceRangeForFile(fileIndex: Int): IntRange {
         require(fileIndex in files.indices) { "file index $fileIndex out of range [0,${files.size})" }
@@ -133,7 +133,7 @@ class FileStorage internal constructor(
     }
 
     /**
-     * Number of 16 KiB merkle leaf blocks in file [fileIndex] — port of
+     * Number of 16 KiB merkle leaf blocks in file [fileIndex]: port of
      * `file_storage::file_num_blocks`. Rounds the file size up to whole blocks.
      */
     fun numBlocksInFile(fileIndex: Int): Int {
@@ -144,7 +144,7 @@ class FileStorage internal constructor(
     }
 
     /**
-     * Number of v2 pieces in file [fileIndex] — port of `file_storage::file_num_pieces`.
+     * Number of v2 pieces in file [fileIndex]: port of `file_storage::file_num_pieces`.
      * Equivalent to [numPiecesInFile] but computed from the file size alone (independent of
      * the concatenated-stream offset), matching how v2 per-file trees are laid out.
      */
@@ -177,13 +177,14 @@ class FileStorage internal constructor(
     }
 
     companion object {
-        /** v2 merkle leaf size (16 KiB) — `default_block_size` in libtorrent. */
+        /** v2 merkle leaf size (16 KiB), called `default_block_size` in libtorrent. */
         const val DEFAULT_BLOCK_SIZE: Int = 16 * 1024
 
         /**
-         * Build a storage layout from an explicit file list — the public entry point for
-         * creating a torrent with [CreateTorrent] (the constructor is internal to keep
-         * parse-time construction in one place; this factory is the supported builder).
+         * Build a storage layout from an explicit file list. This is the public entry
+         * point for creating a torrent with [CreateTorrent]. The constructor is internal
+         * to keep parse-time construction in one place, so this factory is the supported
+         * builder.
          */
         fun of(name: String, pieceLength: Int, files: List<FileEntry>): FileStorage =
             FileStorage(name, pieceLength, files)

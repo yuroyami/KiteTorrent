@@ -1,18 +1,18 @@
 package io.github.yuroyami.kitetorrent.bencode
 
 /**
- * One node in a bencoded hierarchy — the owning variant type, port of libtorrent's
+ * One node in a bencoded hierarchy: the owning variant type, the port of libtorrent's
  * `entry` (entry.hpp). Use this to *build* structures (a torrent file, a DHT
  * message, resume data) and hand them to [Bencode.encode].
  *
- * A bencode string is a raw byte buffer, not text (BEP 3) — the `pieces` field of a
- * torrent, for example, is a run of concatenated 20-byte SHA-1 hashes. So [Str]
- * holds a [ByteArray]; the [text]/[str] helpers exist for the common case of UTF-8
- * keys and values.
+ * A bencode string is a raw byte buffer, not text (BEP 3). The `pieces` field of a
+ * torrent, for example, is a run of concatenated 20-byte SHA-1 hashes. So [Str] holds
+ * a [ByteArray]. The [text] and [str] helpers cover the common case of UTF-8 keys and
+ * values.
  *
  * Dictionary keys are byte strings too, but in practice always ASCII. [Dict] keeps
  * them as [String]; [Bencode.encode] sorts them by raw byte order (required by the
- * spec — and required for info-hashes to match other clients).
+ * spec, and required for info-hashes to match other clients).
  */
 sealed class Entry {
 
@@ -21,7 +21,7 @@ sealed class Entry {
 
     /** A byte string (`<len>:<bytes>`). */
     class Str(val bytes: ByteArray) : Entry() {
-        /** The bytes decoded as UTF-8 — for the text fields (announce URLs, names…). */
+        /** The bytes decoded as UTF-8, for the text fields (announce URLs, names…). */
         val text: String get() = bytes.decodeToString()
         override fun equals(other: Any?) = other is Str && bytes.contentEquals(other.bytes)
         override fun hashCode() = bytes.contentHashCode()
@@ -48,7 +48,7 @@ sealed class Entry {
         override fun hashCode() = bytes.contentHashCode()
     }
 
-    /** Uninitialized — encodes as an empty string `0:`, matching libtorrent. */
+    /** Uninitialized. It encodes as an empty string `0:`, matching libtorrent. */
     object Undefined : Entry()
 
     // --- typed accessors; throw if the entry is the wrong type (like libtorrent) ----

@@ -5,8 +5,8 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
 import io.github.yuroyami.kitetorrent.Sha256Hash
 
 /**
- * Incremental SHA-1 hasher producing a [Sha1Hash] — port of libtorrent's `hasher`
- * (hasher.hpp). This is the workhorse for v1 info-hashes and piece hashes.
+ * Incremental SHA-1 hasher producing a [Sha1Hash], the port of libtorrent's `hasher`
+ * (hasher.hpp). It computes v1 info-hashes and piece hashes.
  */
 class Hasher {
     private val sha = Sha1()
@@ -27,7 +27,7 @@ class Hasher {
 }
 
 /**
- * Incremental SHA-256 hasher producing a [Sha256Hash] — port of libtorrent's
+ * Incremental SHA-256 hasher producing a [Sha256Hash], the port of libtorrent's
  * `hasher256`. Used for BitTorrent v2 piece hashing and merkle-tree nodes.
  */
 class Hasher256 {

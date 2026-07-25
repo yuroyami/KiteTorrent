@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
 /**
  * Super-seeding: a seed in super-seed mode advertises only one piece at a time, releasing
  * the next only after the peer announces it got the previous. A single leecher must still
- * download the whole multi-piece torrent — proving the hand-out / propagate / reassign loop
+ * download the whole multi-piece torrent, proving the hand-out / propagate / reassign loop
  * walks through every piece instead of stalling.
  */
 class SuperSeedTest {

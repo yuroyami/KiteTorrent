@@ -17,7 +17,7 @@ import kotlin.random.Random
  * to form the obfuscation XOR mask used later in the MSE handshake; [req3XorMask]
  * reproduces libtorrent's `hasher(req3).update(buffer).final()`.
  *
- * Bignum support (modular exponentiation) comes from [BigInt] — there is no
+ * Bignum support (modular exponentiation) comes from [BigInt]. There is no
  * `BigInteger` in the Kotlin common stdlib, so libtorrent's `boost::multiprecision`
  * usage is reimplemented from scratch.
  */

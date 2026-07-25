@@ -21,7 +21,7 @@ enum class UtpType(val code: Int) {
     ST_FIN(1),
     /** State / pure-ACK packet (no payload). */
     ST_STATE(2),
-    /** Hard reset — terminate the connection immediately. */
+    /** Hard reset: terminate the connection immediately. */
     ST_RESET(3),
     /** Connection request (handshake). */
     ST_SYN(4),
@@ -41,7 +41,7 @@ enum class UtpType(val code: Int) {
  * { utp_no_extension = 0, utp_sack = 1, utp_close_reason = 3 };
  * ```
  *
- * (2 is intentionally skipped — a deprecated extension uses that number in the wild.)
+ * (2 is intentionally skipped, because a deprecated extension already uses that number.)
  */
 object UtpExtension {
     const val NONE = 0
@@ -75,7 +75,7 @@ const val UTP_VERSION = 1
 const val UTP_HEADER_SIZE = 20
 
 /**
- * A parsed/parseable uTP header — the faithful Kotlin analogue of libtorrent's
+ * A parsed/parseable uTP header: the faithful Kotlin analogue of libtorrent's
  * `struct utp_header` (`include/libtorrent/aux_/utp_stream.hpp`).
  *
  * libtorrent stores each field in a `big_endian_int`, which casts a raw network
@@ -131,7 +131,7 @@ data class UtpHeader(
         /**
          * Parse a [UtpHeader] from the first 20 bytes of [buf] starting at [offset].
          * Returns `null` when there aren't 20 bytes available or the type nibble is
-         * not a known [UtpType] — libtorrent's `incoming_packet()` likewise rejects
+         * not a known [UtpType]. libtorrent's `incoming_packet()` likewise rejects
          * `buf.size() < sizeof(utp_header)` and `get_type() >= NUM_TYPES`.
          *
          * Note: this does NOT validate the version; callers that need libtorrent's
@@ -161,8 +161,8 @@ data class UtpHeader(
  * the first extension was [UtpExtension.SACK]), and the [payload] (bytes after all
  * extension headers).
  *
- * libtorrent doesn't materialise a struct like this — it walks the extension chain
- * in place inside `incoming_packet()` — but a value object keeps the Kotlin parser
+ * libtorrent doesn't materialise a struct like this (it walks the extension chain
+ * in place inside `incoming_packet()`), but a value object keeps the Kotlin parser
  * pure and trivially testable.
  */
 class UtpPacket(
@@ -174,7 +174,7 @@ class UtpPacket(
 
 /**
  * Build a full uTP packet: [header] (its [UtpHeader.extension] is overridden to
- * advertise a SACK iff [sack] is non-null), then — if present — the SACK extension
+ * advertise a SACK iff [sack] is non-null), then, if present, the SACK extension
  * TLV (`next_ext=0`, `len`, bitmask), then [payload].
  *
  * The extension framing matches the chain libtorrent writes/reads: each extension
@@ -202,7 +202,7 @@ fun buildUtpPacket(
 /**
  * Parse a datagram into a [UtpPacket], walking the extension chain to find a SACK
  * bitmask and to locate the payload. Returns `null` on any malformed framing
- * (short header, unknown type, truncated extension) — the same family of rejects
+ * (short header, unknown type, truncated extension). These are the same rejects
  * libtorrent applies in `incoming_packet()`.
  *
  * Faithful to the extension walk:

@@ -11,7 +11,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Tests the rarest-first piece picker ([PiecePicker]) — a faithful core port of
+ * Tests the rarest-first piece picker ([PiecePicker]): a faithful core port of
  * libtorrent's `piece_picker`.
  *
  * The assertions pin behaviour we can derive from first principles (no opaque
@@ -84,7 +84,7 @@ class PiecePickerTest {
         // effectivePriority is lower (picked earlier) for the rarer piece
         assertTrue(p.effectivePriority(5) < p.effectivePriority(1))
 
-        // Ask for just one block from a peer holding both — must be from piece 5.
+        // Ask for just one block from a peer holding both. It must be from piece 5.
         val picks = p.pickPieces(bits(1, 5), numBlocksWanted = 1)
         assertEquals(listOf(PieceBlock(5, 0)), picks)
     }

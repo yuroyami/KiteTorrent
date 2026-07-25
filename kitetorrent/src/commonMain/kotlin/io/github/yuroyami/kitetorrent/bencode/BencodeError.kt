@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.bencode
 
 /**
- * Bdecode error codes — a direct port of libtorrent's `bdecode_errors::error_code_enum`
+ * Bdecode error codes. This is a direct port of libtorrent's `bdecode_errors::error_code_enum`
  * (bdecode.hpp). [BdecodeException] carries one of these plus the byte offset where
  * parsing failed, mirroring libtorrent's `error_code` + `error_pos`.
  */

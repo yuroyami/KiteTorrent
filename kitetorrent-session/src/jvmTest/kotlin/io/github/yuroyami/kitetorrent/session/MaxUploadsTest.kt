@@ -89,7 +89,7 @@ class MaxUploadsTest {
         }
 
         withTimeout(15_000) { while (session.numPeers() < 2) delay(25) }
-        delay(1_500) // well within the 10 s choke interval — onInterested governs
+        delay(1_500) // well within the 10 s choke interval, so onInterested governs
 
         assertEquals(1, session.numUnchoked(), "max_uploads=1 must keep exactly one peer unchoked")
 

@@ -20,7 +20,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Round-trip tests for [ResumeData] — the port of libtorrent's
+ * Round-trip tests for [ResumeData], the port of libtorrent's
  * write_resume_data / read_resume_data. We build an [AddTorrentParams], serialise it,
  * parse it back, and assert the key fields survive; we also assert the on-disk
  * `file-format` magic string and check the resume-data conventions (the `pieces`
@@ -310,7 +310,7 @@ class ResumeDataTest {
 
         // write_resume_data always emits (possibly empty) `trackers`, `url-list` and
         // `httpseeds` keys, and read_resume_data sets the override flags whenever those
-        // keys are *present* — even empty. So a faithful round-trip sets both override
+        // keys are *present*, even when empty. So a faithful round-trip sets both override
         // flags. (This is libtorrent's own behavior, supporting "explicitly removed".)
         assertTrue(back.hasFlag(TorrentFlags.OVERRIDE_TRACKERS))
         assertTrue(back.hasFlag(TorrentFlags.OVERRIDE_WEB_SEEDS))

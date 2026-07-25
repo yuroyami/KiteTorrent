@@ -5,8 +5,8 @@ package io.github.yuroyami.kitetorrent.crypto
  * libtorrent pulls SHA-512 in for ed25519 (DHT mutable items, BEP 44); KiteTorrent
  * needs it for the same reason. Validated against the FIPS test vectors.
  *
- * Works on every KMP target — Kotlin's `Long` is 64-bit everywhere (emulated on JS,
- * but semantically identical).
+ * Works on every KMP target, because Kotlin's `Long` is 64-bit everywhere (emulated on
+ * JS, but semantically identical).
  */
 class Sha512 {
 

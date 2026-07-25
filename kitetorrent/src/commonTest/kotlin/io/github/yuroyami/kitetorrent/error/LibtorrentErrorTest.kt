@@ -20,7 +20,7 @@ class LibtorrentErrorTest {
         // libtorrent's error_code_max is 219 (one past the last code).
         assertEquals(219, LibtorrentError.ENTRY_COUNT)
         assertEquals(219, LibtorrentError.entries.size)
-        // entries[c].code == c for every code in range — the dense-table invariant.
+        // entries[c].code == c for every code in range: the dense-table invariant.
         for (c in 0 until LibtorrentError.ENTRY_COUNT) {
             assertEquals(c, LibtorrentError.entries[c].code, "entries[$c] has wrong code")
         }

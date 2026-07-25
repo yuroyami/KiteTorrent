@@ -4,7 +4,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * The session-wide connection cap — the enforcement half of libtorrent's
+ * The session-wide connection cap, the enforcement half of libtorrent's
  * `connections_limit` setting (`session_impl::m_settings`, default 200).
  *
  * Every torrent shares one budget: an outbound dial or inbound accept first takes a

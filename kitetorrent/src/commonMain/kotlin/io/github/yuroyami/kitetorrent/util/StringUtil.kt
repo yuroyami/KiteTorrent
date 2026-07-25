@@ -1,14 +1,14 @@
 package io.github.yuroyami.kitetorrent.util
 
 /**
- * Small, locale-independent string helpers — pure-Kotlin port of the portable parts of
- * libtorrent's `string_util.cpp` / `string_util.hpp` (plus `base64encode` from
+ * Small, locale-independent string helpers. This is a pure-Kotlin port of the portable
+ * parts of libtorrent's `string_util.cpp` and `string_util.hpp` (plus `base64encode` from
  * `escape_string.cpp`).
  *
  * These deliberately reimplement the C `ctype` predicates (`isalpha`, `isspace`, …)
  * over the ASCII range only, exactly like libtorrent does, so that behaviour is
- * **identical on every platform regardless of the C locale** — which is the whole
- * reason libtorrent rolled its own. Anything in `string_util.cpp` that depends on
+ * **identical on every platform regardless of the C locale**. That is why libtorrent
+ * wrote its own. Anything in `string_util.cpp` that depends on
  * sockets, addresses, the global RNG, locale conversion, or raw C memory management
  * (`parse_listen_interfaces`, `print_listen_interfaces`, `url_random`,
  * `allocate_string_copy`, `convert_to_native`, `is_i2p_url`, …) is intentionally not
@@ -36,7 +36,7 @@ object StringUtil {
 
     /**
      * libtorrent `is_space`: ASCII whitespace. Note this matches the C set
-     * `' ' \t \n \r \f \v` — *not* Kotlin's [Char.isWhitespace], which is Unicode-aware.
+     * `' ' \t \n \r \f \v`, and *not* Kotlin's [Char.isWhitespace], which is Unicode-aware.
      */
     fun isSpace(c: Char): Boolean =
         c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == FORM_FEED || c == VERTICAL_TAB
@@ -53,7 +53,7 @@ object StringUtil {
 
     /**
      * libtorrent `to_string(std::int64_t)`: decimal text of [n] with a well-defined,
-     * locale-independent result. Handles [Long.MIN_VALUE] correctly — its magnitude is
+     * locale-independent result. It handles [Long.MIN_VALUE] correctly. That magnitude is
      * not representable as a positive signed Long, so the digits are produced via
      * unsigned arithmetic, exactly as the C++ does.
      */
@@ -114,8 +114,8 @@ object StringUtil {
     }
 
     /**
-     * libtorrent `trim` (escape_string.cpp): strips only `" \t\n\r"` — the narrower set
-     * the `trim` helper uses (no form-feed / vertical-tab), kept distinct from
+     * libtorrent `trim` (escape_string.cpp): strips only `" \t\n\r"`. This is the narrower
+     * set the `trim` helper uses (no form-feed, no vertical-tab), kept distinct from
      * [stripString] to stay faithful to both call sites.
      */
     fun trim(s: String): String {
@@ -141,7 +141,7 @@ object StringUtil {
 
     /**
      * libtorrent `split_string_quotes`: like [splitString], but if the string starts
-     * with a double-quote (`"`) — and the separator itself is not `"` — separators are
+     * with a double-quote (`"`), and the separator itself is not `"`, then separators are
      * ignored until the closing quote. Faithful port of the index-walking in the C++.
      */
     fun splitStringQuotes(last: String, sep: Char): Pair<String, String> {
@@ -212,7 +212,7 @@ object StringUtil {
     fun convertPathToPosix(path: String): String = path.replace('\\', '/')
 
     // ---------------------------------------------------------------------------
-    // base64 (from escape_string.cpp — pure, no platform deps)
+    // base64 (from escape_string.cpp: pure, no platform deps)
     // ---------------------------------------------------------------------------
 
     private const val BASE64_TABLE =

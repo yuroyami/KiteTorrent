@@ -11,9 +11,8 @@ import kotlin.test.assertTrue
 
 /**
  * Foundation tests. The hash engines are checked against the canonical FIPS
- * 180-1 / 180-4 test vectors — if these pass, info-hash and piece-hash
- * computation is byte-for-byte compatible with libtorrent and every other
- * BitTorrent client.
+ * 180-1 and 180-4 test vectors. If these pass, info-hash and piece-hash computation
+ * is byte-for-byte compatible with libtorrent and every other BitTorrent client.
  */
 class CoreFoundationTest {
 

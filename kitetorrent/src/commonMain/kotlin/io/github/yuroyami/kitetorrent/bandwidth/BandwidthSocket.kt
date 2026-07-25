@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.bandwidth
 
 /**
- * The callback surface a bandwidth consumer exposes to a [BandwidthManager] —
+ * The callback surface a bandwidth consumer exposes to a [BandwidthManager]:
  * pure-Kotlin port of libtorrent's `bandwidth_socket` (aux_/bandwidth_socket.hpp).
  *
  * In libtorrent the only implementer is `peer_connection`. The manager is a pure
@@ -12,9 +12,9 @@ package io.github.yuroyami.kitetorrent.bandwidth
  */
 interface BandwidthSocket {
     /**
-     * Hands [amount] bytes of quota (on bandwidth [channel] — upload or download)
-     * to this consumer. Invoked once the consumer's outstanding request has been
-     * fully satisfied or has run out of time-to-live.
+     * Hands [amount] bytes of quota to this consumer on bandwidth [channel]
+     * (upload or download). The manager calls this once the consumer's outstanding
+     * request has been fully satisfied or has run out of time-to-live.
      */
     fun assignBandwidth(channel: Int, amount: Int)
 

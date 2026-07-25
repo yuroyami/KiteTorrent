@@ -1,12 +1,12 @@
 package io.github.yuroyami.kitetorrent.bandwidth
 
 /**
- * One consumer's outstanding bandwidth request — pure-Kotlin port of libtorrent's
+ * One consumer's outstanding bandwidth request: pure-Kotlin port of libtorrent's
  * `bw_request` (aux_/bandwidth_queue_entry.hpp, bandwidth_queue_entry.cpp).
  *
  * A request asks for [requestSize] bytes on behalf of [peer], competing at the
  * given [priority] (1 is normal). It belongs to up to [MAX_BANDWIDTH_CHANNELS]
- * [BandwidthChannel]s — the channels that need to ration it (its own limit, its
+ * [BandwidthChannel]s, the channels that need to ration it (its own limit, its
  * torrent's, the global one, …). The [BandwidthManager] accumulates [assigned]
  * bytes across rounds until it reaches [requestSize] or [ttl] runs out, then fires
  * the consumer's `assignBandwidth` callback.
@@ -28,7 +28,7 @@ class BwRequest(
 
     /**
      * Remaining scheduling rounds before the request is force-dispatched even if
-     * only partially filled — guarantees progress at very low rate limits.
+     * only partially filled. This guarantees progress at very low rate limits.
      * Starts at 20, matching libtorrent. (`ttl`)
      */
     var ttl: Int = 20
@@ -47,8 +47,8 @@ class BwRequest(
      *
      * - the request can take at most `requestSize - assigned` more bytes;
      * - each channel's share is `distributeQuota * priority / tmp`, and the channel
-     *   that allows the least caps the assignment (unlimited channels — throttle 0 —
-     *   and channels with no competing priority are skipped);
+     *   that allows the least caps the assignment (this skips unlimited channels,
+     *   which have throttle 0, and channels with no competing priority);
      * - [ttl] decrements every call regardless.
      */
     fun assignBandwidth(): Int {

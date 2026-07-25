@@ -60,10 +60,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * The top-level engine — the KiteTorrent equivalent of libtorrent's `session`. It owns
+ * The top-level engine, the KiteTorrent equivalent of libtorrent's `session`. It owns
  * the shared [NetworkRuntime], the [RateLimiter], the [ConnectionBudget], an optional
- * [DhtNode] and [UtpSocketManager], and the set of active [TorrentSession]s — the
- * single object an app talks to.
+ * [DhtNode] and [UtpSocketManager], and the set of active [TorrentSession]s. This is
+ * the single object an app talks to.
  *
  * Configuration flows through the ported [SettingsPack], exactly like
  * `session(settings_pack)`: `connections_limit` caps the session-wide peer count,
@@ -74,8 +74,8 @@ import kotlinx.coroutines.sync.withLock
  * With [enableUtp], one UDP socket on [listenPort] carries µTP: outgoing connections
  * dial uTP first (TCP fallback) and inbound uTP connects are accepted and routed by
  * info-hash exactly like the TCP accept loop. When the DHT is enabled too, both share
- * that socket through the manager's demultiplexer — libtorrent's single-listen-socket
- * model.
+ * that socket through the manager's demultiplexer. This is libtorrent's
+ * single-listen-socket model.
  *
  * @param clock epoch-seconds provider for DHT expiry (`{ System.currentTimeMillis()/1000 }`).
  */
@@ -110,13 +110,13 @@ class KiteTorrentEngine(
     // current count and already-running sessions keep the previous budget (see setConnectionsLimit).
     private var connections = ConnectionBudget(settings.getInt(IntSetting.CONNECTIONS_LIMIT))
 
-    /** Session-wide IP blocklist — add ranges via [IpFilter.addRule]; enforced on dial + accept. */
+    /** Session-wide IP blocklist. Add ranges via [IpFilter.addRule]. Enforced on dial and accept. */
     val ipFilter = IpFilter()
 
     /**
      * Max concurrently-*active* (non-paused) torrents (`active_limit`); -1 = unlimited. Torrents
      * added past the limit are queued (paused), and the oldest queued one resumes whenever an
-     * active torrent pauses — the port of libtorrent's auto-managed torrent queue.
+     * active torrent pauses. This is the port of libtorrent's auto-managed torrent queue.
      */
     var activeLimit: Int = -1
         set(value) { field = value; scope.launch { reconcileQueue() } }
@@ -170,8 +170,8 @@ class KiteTorrentEngine(
         // anonymous_mode: refuse to even open a listen socket (no inbound, no identifying port).
         if (!anonymousMode()) startListening()
         rateLimiter.start()
-        // UDP (µTP + DHT) binds the same port number TCP resolved to — peers reach
-        // both transports on the one advertised port, libtorrent's listen model.
+        // UDP (µTP + DHT) binds the same port number TCP resolved to, so peers reach
+        // both transports on the one advertised port. This is libtorrent's listen model.
         // When a SOCKS5 proxy is configured we first open the UDP ASSOCIATE relay and route the
         // shared socket through it, so the real destination IP is hidden (libtorrent's
         // udp_socket wraps/unwraps on the same listen socket when a socks5 relay is up). The relay
@@ -192,7 +192,7 @@ class KiteTorrentEngine(
                 startDhtMaintenance()
             }
         }
-        // NAT traversal (UPnP + NAT-PMP) — never in anonymous mode (it would leak our presence).
+        // NAT traversal (UPnP + NAT-PMP). Never in anonymous mode: it would reveal our presence.
         if (!anonymousMode()) startNatTraversal()
     }
 
@@ -282,8 +282,8 @@ class KiteTorrentEngine(
     // --- live settings re-application (port of session_impl::apply_settings) ---------
 
     /**
-     * Re-apply a (possibly partial) [pack] of settings to the running engine and its sessions —
-     * the port of `session::apply_settings`. Copies every override in [pack] into this engine's
+     * Re-apply a (possibly partial) [pack] of settings to the running engine and its
+     * sessions. This is the port of `session::apply_settings`. It copies every override in [pack] into this engine's
      * live [settings], then re-drives the knobs that are wired here: rate limits, connections_limit,
      * proxy_*, per-torrent unchoke slots and connection caps. Knobs read once at construction time
      * (request/choke timeouts) take effect for torrents added afterwards.
@@ -420,11 +420,11 @@ class KiteTorrentEngine(
     }
 
     /**
-     * Add a torrent and begin downloading it. Announces to trackers immediately, and —
-     * if the DHT is up — kicks off a `get_peers` lookup whose results are fed in too.
+     * Add a torrent and begin downloading it. Announces to trackers immediately. When the
+     * DHT is running it also starts a `get_peers` lookup and feeds those results in.
      *
      * Pass [resume] (from [TorrentSession.saveResumeData] / `ResumeData.read`) to restore a
-     * previous run's progress without re-hashing the data on disk — the fast-resume path.
+     * previous run's progress without re-hashing the data on disk. This is the fast-resume path.
      */
     suspend fun addTorrent(
         torrent: TorrentInfo,
@@ -453,8 +453,8 @@ class KiteTorrentEngine(
         session.onAlert = { a -> postAlert(a) }
         // feed a BEP-5 `port` peer's advertised UDP node to the DHT, if any.
         session.onDhtPort = { host, port -> scope.launch { runCatching { feedDhtNode(host, port) } } }
-        // key by the 20-byte WIRE info-hash (v1, or truncated v2) so inbound handshakes —
-        // which carry that hash — route correctly for v1, hybrid and v2-only alike
+        // key by the 20-byte WIRE info-hash (v1, or truncated v2). Inbound handshakes carry
+        // that hash, so v1, hybrid and v2-only torrents all route correctly
         torrents[torrent.wireInfoHash().toHex()] = session
         session.start()
 
@@ -491,8 +491,8 @@ class KiteTorrentEngine(
     /**
      * Bring the active-torrent count in line with [activeLimit]: pause the newest running
      * torrents over the limit (queue them), and resume the oldest queue-paused ones when slots
-     * free. Idempotent and serialized by [queueMutex] — decisions are made under the lock,
-     * pause/resume applied after release. A torrent the app paused itself stays paused (it's
+     * free. Idempotent and serialized by [queueMutex]: decisions are made under the lock,
+     * and pause or resume is applied after release. A torrent the app paused itself stays paused (it's
      * never in [queuePaused], so reconcile won't resume it) and its freed slot goes to the queue.
      */
     private suspend fun reconcileQueue() {
@@ -515,7 +515,7 @@ class KiteTorrentEngine(
 
     /**
      * Start a download from a magnet link. Connects to [peers] (from the magnet's
-     * trackers/DHT — discovery is the caller's or the engine's job), fetches the
+     * trackers or the DHT, since discovery is the caller's or the engine's job), fetches the
      * metadata from the first cooperative peer via BEP-9 `ut_metadata`, builds a
      * [TorrentInfo], then begins a normal download with the disk [diskFactory] produces.
      * Returns null if no peer could supply the metadata.
@@ -525,7 +525,7 @@ class KiteTorrentEngine(
         peers: List<PeerEndpoint>,
         diskFactory: (TorrentInfo) -> DiskIo,
     ): TorrentSession? {
-        // v1-or-v2: a btmh-only (v2) magnet has no v1 hash — fetch+verify against the v2 SHA-256.
+        // v1-or-v2: a btmh-only (v2) magnet has no v1 hash, so fetch and verify against the v2 SHA-256.
         // For a hybrid magnet prefer v1 (the metadata verifies against either; v1 is the wire hash).
         val verifyHash: Digest32 = magnet.infoHashV1 ?: magnet.infoHashV2 ?: return null
         // the hash we present to the wire/peer-connection is always the 20-byte form.
@@ -552,7 +552,7 @@ class KiteTorrentEngine(
     /**
      * Convenience magnet add with built-in peer discovery. Pools peers for the magnet's
      * info-hash from the DHT (when [enableDht]) and from the magnet's trackers, then
-     * delegates to the peer-list [addMagnet] overload — which fetches the metadata via
+     * delegates to the peer-list [addMagnet] overload, which fetches the metadata via
      * BEP-9 `ut_metadata` and starts the download. Returns null if no peer was reachable
      * or none could supply the metadata.
      */
@@ -568,7 +568,7 @@ class KiteTorrentEngine(
         return addMagnet(magnet, peers, diskFactory)
     }
 
-    /** The 20-byte wire/DHT form of a v2 (SHA-256) info-hash — the v2 hash truncated (BEP-52). */
+    /** The 20-byte wire and DHT form of a v2 (SHA-256) info-hash: the v2 hash truncated (BEP-52). */
     private fun truncateToWire(v2: Sha256Hash): Sha1Hash =
         Digest32.sha1(v2.toByteArray().copyOf(Digest32.SHA1_SIZE))
 
@@ -597,7 +597,7 @@ class KiteTorrentEngine(
                 port = boundListenPort,
                 uploaded = 0L,
                 downloaded = 0L,
-                left = Long.MAX_VALUE, // metadata not yet known — announce as a leecher
+                left = Long.MAX_VALUE, // metadata not yet known, so announce as a leecher
                 event = TrackerEvent.STARTED,
             )
             for (url in trackers) {
@@ -610,7 +610,7 @@ class KiteTorrentEngine(
 
     /**
      * Scrape swarm statistics (seeders / completed / leechers) for [infoHash] from the first
-     * responsive entry in [trackers] — UDP via an ephemeral socket (BEP-15), HTTP via the
+     * responsive entry in [trackers]: UDP via an ephemeral socket (BEP-15), HTTP via the
      * injected client (BEP-48). Returns null if no tracker answered. The counterpart of
      * libtorrent's `tracker_manager` scrape path.
      */
@@ -661,8 +661,8 @@ class KiteTorrentEngine(
      * Bind an ephemeral UDP socket for a one-shot UDP-tracker announce/scrape, routing it through
      * the proxy when one is configured: for a SOCKS5 proxy a fresh UDP ASSOCIATE relay is opened
      * over this socket (its own short-lived control connection, torn down when the socket closes)
-     * so the tracker datagrams are wrapped and the real tracker IP is hidden — libtorrent runs UDP
-     * trackers over the same proxied `udp_socket` path. Without a SOCKS5 proxy the plain socket is
+     * so the tracker datagrams are wrapped and the real tracker IP is hidden. libtorrent runs
+     * UDP trackers over the same proxied `udp_socket` path. Without a SOCKS5 proxy the plain socket is
      * returned unchanged. The proxied view shares this socket, so closing it ends the association.
      */
     private suspend fun bindUdpTracker(): UdpSocket {
@@ -676,7 +676,7 @@ class KiteTorrentEngine(
 
     /** Extract the host from a `host:port` / `[v6]:port` remote-address string. */
     private fun hostOf(remoteAddress: String): String? {
-        // ktor/Java socket addresses stringify as "/127.0.0.1:54321" — drop the leading slash
+        // ktor/Java socket addresses stringify as "/127.0.0.1:54321", so drop the leading slash
         val s = remoteAddress.removePrefix("/")
         if (s.startsWith("[")) return s.substringAfter('[').substringBefore(']')
         val host = s.substringBeforeLast(':', s)
@@ -695,8 +695,8 @@ class KiteTorrentEngine(
 
     /**
      * Fetch the `info` dict from [peer] via BEP-9: handshake under the 20-byte [wireHash] (what the
-     * peer expects on the wire), then verify the assembled metadata against [verifyHash] — the v1
-     * SHA-1 for a v1/hybrid magnet, the v2 SHA-256 for a btmh-only magnet ([MetadataExchange]
+     * peer expects on the wire), then verify the assembled metadata against [verifyHash]. That is
+     * the v1 SHA-1 for a v1 or hybrid magnet, and the v2 SHA-256 for a btmh-only magnet ([MetadataExchange]
      * dispatches on digest width). Defaults [verifyHash] to [wireHash] for the v1 callers.
      */
     private suspend fun fetchMetadataFrom(
@@ -746,7 +746,8 @@ class KiteTorrentEngine(
      * Record an external-IP observation (from a DHT `ip` reply, a tracker's `external ip`, or a
      * port-mapper's reported address) into the majority vote. When a new winner emerges it is
      * adopted as [externalIp] and propagated to the DHT secure-id derivation (BEP-42). Minimal
-     * inline [io.github.yuroyami.kitetorrent.session.dht] `ip_voter` — most-votes-wins.
+     * inline [io.github.yuroyami.kitetorrent.session.dht] `ip_voter`: the address with the
+     * most votes wins.
      */
     fun voteExternalIp(address: String) {
         if (address.isBlank()) return
@@ -766,8 +767,8 @@ class KiteTorrentEngine(
      * Open the single UDP socket the engine shares between µTP and the DHT, bound to the resolved
      * listen port (libtorrent's one-listen-socket model). When the configured proxy is SOCKS5 it
      * first negotiates a UDP ASSOCIATE relay *over that very socket* and returns a proxied view that
-     * SOCKS5-wraps every send / unwraps every receive — so the destination IP never leaves the host
-     * in clear. Any proxy-negotiation failure falls back to the direct socket (best-effort, matching
+     * SOCKS5-wraps every send and unwraps every receive, so the destination IP never leaves
+     * the host in clear. Any proxy-negotiation failure falls back to the direct socket (best-effort, matching
      * the rest of start()'s `runCatching` posture), keeping the non-proxy path byte-identical.
      */
     private suspend fun openSharedUdpSocket(): UdpSocket {
@@ -793,8 +794,8 @@ class KiteTorrentEngine(
         socks5Udp?.let { return it }
         val cfg = network.proxy as? Socks5Config ?: return null
         return runCatching {
-            // the control connection reaches the proxy itself — dial it DIRECTLY, never through
-            // the proxy we are about to establish (that would dead-loop the SOCKS5 negotiation).
+            // the control connection reaches the proxy itself, so dial it DIRECTLY, never through
+            // the proxy we are about to establish (that would make the negotiation recurse forever).
             val control = network.connectTcp(cfg.host, cfg.port, bypassProxy = true)
             val relaySock = relay ?: network.bindUdp(0)
             socks5UdpAssociate(control, relaySock, cfg).also { socks5Udp = it }
@@ -917,7 +918,7 @@ class KiteTorrentEngine(
     /**
      * Drive [DhtNode.maintain] (self-refresh, bucket refresh, token rotation, storage expiry,
      * DoS-window reset) on a periodic tick, and re-announce all active torrents on the DHT
-     * announce interval — the port of session_impl's `dht_announce` / `node::tick` cadence.
+     * announce interval. This is the port of session_impl's `dht_announce` and `node::tick` cadence.
      */
     private fun startDhtMaintenance() {
         if (dhtMaintainJob != null) return

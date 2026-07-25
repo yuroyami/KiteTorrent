@@ -18,9 +18,10 @@ import kotlin.test.assertTrue
 /**
  * Dynamic-window integration check: a multi-window transfer completes correctly while the
  * congestion window is live (no longer the old fixed 64 KiB), and the window stays within
- * sane bounds throughout — at least one MSS, never past the cap. The directional proofs
- * live in the focused controller tests: growth/back-off under delay in [UtpLedbatTest],
- * multiplicative decrease on loss in [UtpRetransmitTest] / [UtpFastResendTest].
+ * sane bounds throughout: at least one MSS, and never past the cap. The directional
+ * proofs live in the focused controller tests. [UtpLedbatTest] covers growth and
+ * back-off under delay. [UtpRetransmitTest] and [UtpFastResendTest] cover
+ * multiplicative decrease on loss.
  */
 class UtpCongestionTest {
 

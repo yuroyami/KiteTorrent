@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.protocol
 import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
 
 /**
- * One message of the BitTorrent peer wire protocol — the pure-Kotlin port of the
+ * One message of the BitTorrent peer wire protocol. This is the pure-Kotlin port of the
  * `write_*` senders and `on_*` parsers in `bt_peer_connection.cpp`, plus the message
  * id enum `bt_peer_connection::message_type` (include/libtorrent/bt_peer_connection.hpp).
  *
@@ -100,7 +100,7 @@ sealed class PeerMessage {
     }
 
     /**
-     * `piece` (id 7): a block of data — [block] bytes at [begin] within [piece].
+     * `piece` (id 7): a block of data, [block] bytes at [begin] within [piece].
      * On the wire: `[len][7][int32 piece][int32 begin][raw block]`, len = `block.size + 9`.
      */
     data class Piece(val piece: Int, val begin: Int, val block: ByteArray) : PeerMessage() {
@@ -359,7 +359,7 @@ sealed class PeerMessage {
         private fun encodeEmpty(id: Int): ByteArray =
             byteArrayOf(0, 0, 0, 1, id.toByte())
 
-        /** Encode `[len=1+4n][id][int32 BE args...]` — the `send_message` template shape. */
+        /** Encode `[len=1+4n][id][int32 BE args...]`: the `send_message` template shape. */
         private fun encodeInts(id: Int, vararg ints: Int): ByteArray {
             val len = 1 + ints.size * 4
             val out = ByteArray(4 + len)
@@ -422,7 +422,7 @@ sealed class PeerMessage {
          * Mirrors the per-type `on_*` parsers and the `dispatch_message` switch. Frames
          * that are too short for their declared type fall through to [Unknown] rather
          * than throwing, so a caller looping over a buffer never crashes on a peer that
-         * sends a malformed body — the connection layer decides whether to disconnect.
+         * sends a malformed body. The connection layer decides whether to disconnect.
          */
         fun decode(frame: ByteArray): PeerMessage {
             if (frame.isEmpty()) return KeepAlive
@@ -522,7 +522,7 @@ sealed class PeerMessage {
          *
          * Returns the decoded message paired with the total number of bytes consumed
          * (the 4 length bytes + the body), or null if fewer than a whole message is
-         * available yet — the caller keeps buffering and retries. This is the codec
+         * available yet, in which case the caller keeps buffering and retries. This is the codec
          * half of libtorrent's `m_recv_buffer` packet machinery: read a 4-byte length,
          * then wait for that many body bytes before dispatching.
          *
@@ -553,7 +553,7 @@ class BadFrameLengthException(val declaredLength: Long) :
     RuntimeException("peer announced frame length $declaredLength (exceeds Int.MAX_VALUE)")
 
 /**
- * The numeric BitTorrent peer-message ids — a faithful copy of the
+ * The numeric BitTorrent peer-message ids. This is a faithful copy of the
  * `bt_peer_connection::message_type` enum (include/libtorrent/bt_peer_connection.hpp).
  */
 object MessageId {
@@ -580,8 +580,8 @@ object MessageId {
     /** Extension protocol (BEP-10). */
     const val EXTENDED: Int = 20
 
-    // BitTorrent v2 hash messages (BEP-52) — defined for completeness; not modelled
-    // as PeerMessage subtypes in v0.
+    // BitTorrent v2 hash messages (BEP-52). Defined for completeness. They are not
+    // modelled as PeerMessage subtypes in v0.
     const val HASH_REQUEST: Int = 21
     const val HASHES: Int = 22
     const val HASH_REJECT: Int = 23
@@ -616,7 +616,7 @@ internal object ByteIo {
     }
 
     /**
-     * Read a 32-bit big-endian value at [off] as a signed [Int] — the natural Kotlin
+     * Read a 32-bit big-endian value at [off] as a signed [Int]. That is the natural Kotlin
      * type for piece indices, offsets and lengths (matches `aux::read_int32`).
      */
     fun readUInt32BEAsInt(buf: ByteArray, off: Int): Int {

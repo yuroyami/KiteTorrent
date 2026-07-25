@@ -23,7 +23,7 @@ import kotlin.test.assertEquals
 
 /**
  * Auto-managed torrent queue (`active_limit`): with the active limit at 2, the third torrent
- * added is queued (paused); when an active torrent is paused, the queued one resumes — so the
+ * added is queued (paused); when an active torrent is paused, the queued one resumes, so the
  * engine never runs more than `active_limit` torrents at once, FIFO.
  */
 class QueueManagementTest {

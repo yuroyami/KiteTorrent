@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.session.peer
 import io.github.yuroyami.kitetorrent.Bitfield
 
 /**
- * The per-connection choke/interest state — the Kotlin counterpart of the four
+ * The per-connection choke/interest state: the Kotlin counterpart of the four
  * `m_choked` / `m_peer_choked` / `m_interesting` / `m_peer_interested` flag bits in
  * libtorrent's `peer_connection` (peer_connection.hpp), plus the peer's piece
  * availability (`m_have_piece`).
@@ -60,7 +60,7 @@ class PeerState(
      */
     val theirBitfield: Bitfield = Bitfield(numPieces)
 
-    /** Number of pieces the peer has — `theirBitfield.count()`, cached cheaply. */
+    /** Number of pieces the peer has, from `theirBitfield.count()`, cached cheaply. */
     val theirPieceCount: Int get() = theirBitfield.count()
 
     /** True if the peer has advertised every piece (it is a seed). */

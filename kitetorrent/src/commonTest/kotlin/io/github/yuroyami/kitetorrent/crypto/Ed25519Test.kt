@@ -118,7 +118,7 @@ class Ed25519Test {
 
     @Test
     fun signVerifyRoundTripArbitraryMessage() {
-        // not a published vector — just exercise the full path with our own seed
+        // not a published vector: this only exercises the full path with our own seed
         val seed = ByteArray(32) { (it * 7 + 1).toByte() }
         val (pub, priv) = Ed25519.createKeypair(seed)
         val message = ByteArray(100) { it.toByte() }

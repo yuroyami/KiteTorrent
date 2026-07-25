@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.peer
 
 /**
- * Pure-Kotlin CRC-32C (Castagnoli) — the port of the software fallback in
+ * Pure-Kotlin CRC-32C (Castagnoli): the port of the software fallback in
  * libtorrent's `src/crc32c.cpp` (the `boost::crc_optimal<32, 0x1EDC6F41,
  * 0xFFFFFFFF, 0xFFFFFFFF, true, true>` instantiation).
  *

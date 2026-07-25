@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.bencode
 
 /**
- * A node in the tree produced by [Bdecode.decode] — port of libtorrent's
+ * A node in the tree produced by [Bdecode.decode]. The port of libtorrent's
  * `bdecode_node` (bdecode.hpp). Every node keeps a reference to the original parsed
  * [buffer] plus the byte span it occupies, so [dataSection] can hand back the exact
  * bytes a node was parsed from. That is what makes correct info-hashing possible:
@@ -56,7 +56,7 @@ class BdecodeNode internal constructor(
         return buffer.copyOfRange(strStart, strStart + strLen)
     }
 
-    /** String value decoded as UTF-8 — for text fields. */
+    /** String value decoded as UTF-8, for text fields. */
     fun stringValue(): String {
         check(type == Type.STRING) { "node is not a string: $type" }
         return buffer.decodeToString(strStart, strStart + strLen)

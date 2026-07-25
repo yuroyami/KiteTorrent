@@ -10,9 +10,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Tests for [DhtStorage] — the port of `dht_default_storage`
- * (`src/kademlia/dht_storage.cpp`). Time is supplied explicitly (epoch-seconds) so
- * expiry is fully deterministic.
+ * Tests for [DhtStorage]: the port of `dht_default_storage`
+ * (`src/kademlia/dht_storage.cpp`). The tests supply time explicitly (epoch-seconds)
+ * so expiry is fully deterministic.
  */
 class DhtStorageTest {
 

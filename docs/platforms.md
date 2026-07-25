@@ -8,12 +8,12 @@ The split follows one hard line: anything that is pure computation lives in the 
 
 | Platform | Core (`kitetorrent`) | Session (`kitetorrent-session`) |
 |---|:-:|:-:|
-| **Android** | ✓ | ✓ |
-| **iOS arm64** | ✓ | ✓ |
-| **iOS Simulator** (arm64) | ✓ | ✓ |
-| **iOS x64** (Simulator) | ✓ | ✓ |
-| **JVM / Desktop** | ✓ | ✓ |
-| **JavaScript** (IR, Browser / Node) | ✓ | – |
+| **Android** | yes | yes |
+| **iOS arm64** | yes | yes |
+| **iOS Simulator** (arm64) | yes | yes |
+| **iOS x64** (Simulator) | yes | yes |
+| **JVM / Desktop** | yes | yes |
+| **JavaScript** (IR, Browser / Node) | yes | no |
 
 The core depends on `kotlin-stdlib` and nothing else. The session adds `kotlinx.coroutines`, `ktor-network`, and `kotlinx-io`.
 
@@ -184,5 +184,5 @@ If you only parse torrents or build them (no peers), depend on `kitetorrent` alo
 - [Downloading](downloading.md): the full download flow, piece by piece
 - [Magnets](magnets.md): fetch metadata from a magnet link, then download
 - [Core toolkit](core-toolkit.md): parsing, hashing, and bencoding without the engine
-- [About the port](about.md): what is done, what is next
+- [About and status](about.md): what works today, and the known defects
 - [API reference](https://yuroyami.github.io/KiteTorrent/api/)

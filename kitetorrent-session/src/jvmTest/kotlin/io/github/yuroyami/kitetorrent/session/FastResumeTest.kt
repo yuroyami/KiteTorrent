@@ -27,8 +27,8 @@ import kotlin.test.assertTrue
 
 /**
  * Fast-resume proof: a [TorrentSession] started with saved [AddTorrentParams] adopts the
- * previous run's piece state *without hashing the disk* — the libtorrent fast-resume path,
- * versus the full-rehash [TorrentSession.recheck]. Also proves the state survives a full
+ * previous run's piece state *without hashing the disk*. That is the libtorrent fast-resume
+ * path, versus the full-rehash [TorrentSession.recheck]. Also proves the state survives a full
  * round-trip through `ResumeData.write`/`read` (the bytes an app persists across a hard kill),
  * including partially-downloaded pieces.
  */
@@ -66,7 +66,7 @@ class FastResumeTest {
         return disk
     }
 
-    /** Counts how many times the engine hashed a piece — the cost fast-resume avoids. */
+    /** Counts how many times the engine hashed a piece: the cost fast-resume avoids. */
     private class CountingDisk(private val inner: DiskIo) : DiskIo {
         var hashCount = 0
             private set
@@ -144,7 +144,7 @@ class FastResumeTest {
             savePath = "/downloads",
         )
 
-        // through the persisted bytes and back — what actually crosses a restart
+        // through the persisted bytes and back: what actually crosses a restart
         val reread = ResumeData.read(ResumeData.write(crafted))
 
         val runtime = NetworkRuntime(Dispatchers.IO)

@@ -34,10 +34,10 @@ import kotlin.test.assertTrue
 
 /**
  * Live PEX (BEP-11) proof: a downloader connected to ONE peer that has no data but
- * gossips a `ut_pex` message naming a seeder must discover that seeder and complete —
- * i.e. PEX is wired into the engine, not just a codec. The introducer never serves a
- * byte; if the download finishes, the only way the downloader reached the seeder was by
- * ingesting the PEX message.
+ * gossips a `ut_pex` message naming a seeder must discover that seeder and complete.
+ * That proves PEX is wired into the engine, not just a codec. The introducer never
+ * serves a byte; if the download finishes, the only way the downloader reached the
+ * seeder was by ingesting the PEX message.
  */
 class PexExchangeTest {
 
@@ -118,7 +118,7 @@ class PexExchangeTest {
         val session = TorrentSession(
             torrent = torrent, disk = disk, network = runtime,
             scope = workers, peerId = peerId("KT-leecher"), listenPort = introPort,
-            // fake introducer/seeder speak plaintext only — exercise the plaintext dial path
+            // fake introducer/seeder speak plaintext only: exercise the plaintext dial path
             settings = SettingsPack().apply { setInt(IntSetting.OUT_ENC_POLICY, EncPolicy.PE_DISABLED) },
         )
         session.connect(listOf(PeerEndpoint("127.0.0.1", introPort)))

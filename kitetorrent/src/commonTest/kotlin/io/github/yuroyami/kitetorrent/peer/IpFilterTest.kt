@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
  *
  * The structural expectations (exact coalesced ranges after a sequence of
  * [IpFilter.addRule] calls) are copied verbatim from libtorrent's own
- * `test/test_ip_filter.cpp` — `expected1`, the four range-joining cases, the two
+ * `test/test_ip_filter.cpp`. `expected1`, the four range-joining cases, the two
  * multi-overlap cases, the IPv6 case and the `port_filter` case are ground truth
  * from upstream. The assignment's own scenario (block `10/8`, probe the
  * boundaries, coalesce an overlapping insert, exercise IPv6) is layered on top.
@@ -317,7 +317,7 @@ class IpFilterTest {
             .contentEquals(byteArrayOf(0, 0, 0, 255.toByte())))
         // plus_one(255.255.255.255) saturates (stays all-ones in the only caller
         // path that would hit it, which the engine avoids), minus_one(0.0.0.0)
-        // wraps to all-ones — these mirror the byte loop exactly.
+        // wraps to all-ones. Both mirror the byte loop exactly.
         assertTrue(RangeFilter.plusOne(byteArrayOf(-1, -1, -1, -1))
             .contentEquals(byteArrayOf(0, 0, 0, 0)))
         assertTrue(RangeFilter.minusOne(byteArrayOf(0, 0, 0, 0))

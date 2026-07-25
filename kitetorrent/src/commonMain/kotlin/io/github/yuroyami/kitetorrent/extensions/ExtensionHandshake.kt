@@ -6,7 +6,7 @@ import io.github.yuroyami.kitetorrent.bencode.Bencode
 import io.github.yuroyami.kitetorrent.bencode.Entry
 
 /**
- * The BEP-10 extension-protocol handshake — the bencoded dict exchanged as `extended`
+ * The BEP-10 extension-protocol handshake: the bencoded dict exchanged as `extended`
  * message id 0 right after the BitTorrent handshake (when the extension reserved bit is
  * set). Port of libtorrent's `bt_peer_connection::write_extensions` /
  * `parse_extensions`.

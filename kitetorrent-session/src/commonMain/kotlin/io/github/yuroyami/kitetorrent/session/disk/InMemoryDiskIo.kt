@@ -8,7 +8,7 @@ import io.github.yuroyami.kitetorrent.torrent.FileStorage
 /**
  * A [DiskIo] that keeps the whole torrent in one in-memory buffer. The BitTorrent
  * piece model treats the files as a single concatenated byte stream, so piece `p`
- * lives at `p * pieceLength` within that stream — which is exactly this buffer.
+ * lives at `p * pieceLength` within that stream, which is exactly this buffer.
  * Per-file boundaries only matter when writing to real files ([FileDiskIo]); here
  * one buffer is the simplest correct model.
  *
@@ -83,7 +83,7 @@ class InMemoryDiskIo(private val storage: FileStorage) : DiskIo {
     /** The effective name of [fileIndex] after any [rename] (its original path otherwise). */
     fun fileName(fileIndex: Int): String = renamed[fileIndex] ?: storage.files[fileIndex].path
 
-    /** Direct access to the backing bytes — for tests asserting written content. */
+    /** Direct access to the backing bytes, for tests asserting written content. */
     fun snapshot(): ByteArray = data.copyOf()
 
     companion object {

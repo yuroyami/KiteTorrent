@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  */
 class TorrentInfoTest {
 
-    // test/mutable_test_torrents/test1_single.torrent — a single 51200-byte file "a"
+    // test/mutable_test_torrents/test1_single.torrent: a single 51200-byte file "a"
     private val singleFileTorrentHex =
         "6431303a6372656174656420627931303a6c6962746f7272656e7431333a6372656174696f" +
         "6e2064617465693134313934393037303065343a696e666f64363a6c656e67746869353132" +
@@ -24,7 +24,7 @@ class TorrentInfoTest {
         "19fb88d18db962c68faeb8dff2fc9ddd20873de51de6e2767f77898daf51141aa6285221af" +
         "2b4f30155e2b1b0e77f7490795c76565"
 
-    // test/mutable_test_torrents/test1.torrent — a 4-file torrent under directory "test1"
+    // test/mutable_test_torrents/test1.torrent: a 4-file torrent under directory "test1"
     private val multiFileTorrentHex =
         "6431303a6372656174656420627931303a6c6962746f7272656e7431333a637265617469" +
         "6f6e2064617465693134313934353239393265343a696e666f64353a66696c65736c6436" +

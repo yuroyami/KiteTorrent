@@ -13,8 +13,8 @@ import kotlinx.coroutines.sync.withLock
 /**
  * uTP (Micro Transport Protocol, BEP-29) connection over a single [UdpSocket] to one
  * remote `(host, port)`. This is a faithful **core** port of libtorrent's
- * `utp_socket_impl` (`src/utp_stream.cpp`) — enough state machine to actually move
- * bytes — and it implements [ByteStream] so a `PeerConnection` runs over uTP with no
+ * `utp_socket_impl` (`src/utp_stream.cpp`), with enough state machine to actually move
+ * bytes. It implements [ByteStream] so a `PeerConnection` runs over uTP with no
  * changes (the same seam [TcpConnection.asByteStream] satisfies).
  *
  * ### What is faithful
@@ -64,14 +64,14 @@ import kotlinx.coroutines.sync.withLock
  * streams by `(connection_id)`. This class does **not** own the socket's receive
  * loop; the owner pumps inbound datagrams in by calling [onDatagram] with the raw
  * bytes of each packet addressed to this stream. [UtpSocketManager] is that owner in
- * the engine — it runs the receive loop and demultiplexes by connection id, the role
+ * the engine. It runs the receive loop and demultiplexes by connection id, the role
  * `utp_socket_manager` plays upstream.
  *
  * @param socket the shared UDP socket used to *send*; the owner drives receive.
  * @param remoteHost remote peer host.
  * @param remotePort remote peer port.
  * @param scope coroutine scope the background ack/feed work runs in.
- * @param nowMicros injected microsecond clock — the core is clockless, so this
+ * @param nowMicros injected microsecond clock. The core is clockless, so this
  *   defaults to a monotonically increasing counter ([MicrosCounter]). Production may
  *   pass a real monotonic clock so `timestamp_difference` is meaningful to peers.
  * @param connectionId optional fixed `send_id` (the SYN goes out on `send_id - 1`);
@@ -124,7 +124,7 @@ class UtpStream(
     /**
      * The peer has sent a FIN (`m_in_eof`) and the sequence number at/after which no further
      * payload is valid (`m_in_eof_seq_nr`): for a FIN with no payload that's the FIN's own
-     * seq_nr, otherwise the next one. Any DATA whose seq_nr is past this is ignored — the
+     * seq_nr, otherwise the next one. We ignore any DATA whose seq_nr is past this. The
      * connection is draining. (utp_stream.cpp incoming_payload / incoming_packet eof guard.)
      */
     private var inEof = false
@@ -139,13 +139,13 @@ class UtpStream(
 
     // ---- path-MTU discovery (utp_socket_impl m_mtu / m_mtu_floor / m_mtu_ceiling) ----
     /**
-     * Current maximum payload (MSS) per ST_DATA packet — libtorrent's
-     * `m_mtu - header_size`. We start optimistic at [DEFAULT_MAX_PAYLOAD] (a 1500-byte
-     * Ethernet MTU minus IP/UDP/uTP overhead) and, lacking real ICMP "fragmentation
-     * needed" feedback, *shrink toward a floor* whenever repeated loss/timeouts suggest
-     * our packets are too big for the path. We never grow it back (no active probing) —
-     * a simple, safe, bounded approximation of libtorrent's `[mtu_floor, mtu_ceiling]`
-     * search. Exposed via [currentMss].
+     * Current maximum payload (MSS) per ST_DATA packet: libtorrent's
+     * `m_mtu - header_size`. We start optimistic at [DEFAULT_MAX_PAYLOAD], a 1500-byte
+     * Ethernet MTU minus IP/UDP/uTP overhead. We get no real ICMP "fragmentation
+     * needed" feedback, so we *shrink toward a floor* whenever repeated loss or timeouts
+     * suggest our packets are too big for the path. We never grow it back, because
+     * nothing probes upward. That is a simple, safe, bounded approximation of
+     * libtorrent's `[mtu_floor, mtu_ceiling]` search. [currentMss] exposes the value.
      */
     private var mss = DEFAULT_MAX_PAYLOAD
     /**
@@ -158,8 +158,8 @@ class UtpStream(
     private var naglePending: ByteArray? = null
 
     /**
-     * The peer's last-advertised receive window (`wnd_size`) — flow control. We never keep
-     * more bytes in flight than `min(cwnd, peerWindow)`, so a slow receiver isn't overrun.
+     * The peer's last-advertised receive window (`wnd_size`): flow control. We never keep
+     * more bytes in flight than `min(cwnd, peerWindow)`, so we never overrun a slow receiver.
      * Seeded optimistically until the first packet arrives with the peer's real value.
      */
     private var peerWindow = DEFAULT_SEND_WINDOW
@@ -207,7 +207,7 @@ class UtpStream(
 
     // ---- retransmission buffer + RTT/RTO (utp_socket_impl m_outbuf + m_rtt) ---
     /**
-     * One sent, not-yet-acked packet retained for retransmission — the analogue of an
+     * One sent, not-yet-acked packet retained for retransmission: the analogue of an
      * entry in libtorrent's `m_outbuf`. We keep the type + payload (not the encoded
      * bytes) and rebuild the header on every (re)send so the ack_nr / timestamp / window
      * are always current, exactly like `resend_packet()` re-stamps before resending.
@@ -218,7 +218,7 @@ class UtpStream(
         val payload: ByteArray,
         var sendTimeMicros: Long,
         var transmissions: Int,
-        /** Peer has selectively-acked this packet (via SACK) — never resend it. */
+        /** The peer has selectively-acked this packet (via SACK), so we never resend it. */
         var sacked: Boolean = false,
     )
 
@@ -230,7 +230,7 @@ class UtpStream(
     private var rttVarMicros = 0L
     private var rttSamples = 0
 
-    /** Consecutive RTO firings with no forward progress — drives exponential backoff. */
+    /** Consecutive RTO firings with no forward progress. This drives exponential backoff. */
     private var numTimeouts = 0
 
     /** Duplicate (non-advancing) acks seen since the last forward progress; drives fast-resend. */
@@ -297,10 +297,10 @@ class UtpStream(
     override suspend fun write(bytes: ByteArray) {
         ensureUsable()
         connected.await()
-        // Nagle: a sub-MSS tail is held back and coalesced with the *next* write rather
-        // than dribbling out as a tiny packet, unless there's nothing in flight (so a lone
-        // small write isn't stalled forever). Faithful in spirit to send_pkt()'s
-        // m_nagle_packet — we keep it simple by buffering only across write() calls.
+        // Nagle: we hold a sub-MSS tail back and coalesce it with the *next* write rather
+        // than sending a tiny packet, unless there's nothing in flight (so a lone small
+        // write isn't stalled forever). This matches the intent of send_pkt()'s
+        // m_nagle_packet. We keep it simple by buffering only across write() calls.
         val toSend = if (nagleEnabled) {
             val pending = takeNaglePending()
             if (pending != null) {
@@ -322,7 +322,7 @@ class UtpStream(
         while (off < bytes.size) {
             val remaining = bytes.size - off
             // Nagle: if the tail is smaller than a full MSS and we already have unacked data
-            // in flight, stash it and return — it goes out coalesced on the next write/close.
+            // in flight, stash it and return. It goes out coalesced on the next write or close.
             if (!force && nagleEnabled && remaining < currentMssSync() &&
                 lock.withLock { bytesInFlight > 0 }
             ) {
@@ -382,7 +382,7 @@ class UtpStream(
             }
             filled += took
             if (filled == n) break
-            // need more bytes — check terminal conditions then wait for a signal
+            // need more bytes: check terminal conditions then wait for a signal
             errored?.let { throw it }
             val eof = lock.withLock { remoteFinished && inbound.isEmpty() }
             if (eof) throw UtpEofException("uTP stream closed by peer after $filled/$n bytes")
@@ -517,9 +517,9 @@ class UtpStream(
                         }
                     }
                     if (state == State.CONNECTED || state == State.FIN_SENT) {
-                        // Once the peer has FINed, ignore any payload past the EOF seq — the
-                        // connection is draining. A STATE/FIN at exactly the EOF seq is still
-                        // accepted (it carries no new payload). (incoming_packet eof guard.)
+                        // Once the peer has FINed, ignore any payload past the EOF seq. The
+                        // connection is draining. We still accept a STATE/FIN at exactly the
+                        // EOF seq (it carries no new payload). (incoming_packet eof guard.)
                         val stateOrFin = h.type == UtpType.ST_STATE || h.type == UtpType.ST_FIN
                         val pastEof = inEof &&
                             seqLessWrap(inEofSeqNr, h.seqNr) &&
@@ -607,8 +607,8 @@ class UtpStream(
      * mark the stream closed locally. Idempotent. Does not wait for the peer's FIN.
      *
      * Note: [ByteStream] does not declare `close()` (the seam is read/write only, see
-     * `peer/ByteStream.kt`), so this is a plain method — call it on the concrete
-     * [UtpStream] when tearing the transport down.
+     * `peer/ByteStream.kt`), so this is a plain method. Callers invoke it on the
+     * concrete [UtpStream] when tearing the transport down.
      */
     fun close() {
         socketClose()
@@ -630,7 +630,7 @@ class UtpStream(
                         // Graceful close (send_fin → state fin_sent): the FIN carries the
                         // current seq_nr WITHOUT incrementing it (a FIN doesn't consume a
                         // sequence), and goes into the out-buffer so the RTO ticker resends
-                        // it if it's lost — a dropped FIN must not leave the peer hanging.
+                        // it if it's lost. A dropped FIN must not leave the peer waiting.
                         val fin = OutPacket(seqNr, UtpType.ST_FIN, EMPTY_BYTES, 0, 0)
                         outBuf[seqNr] = fin
                         state = State.FIN_SENT
@@ -684,11 +684,11 @@ class UtpStream(
     // =========================================================================
 
     /**
-     * One retransmission tick — the analogue of `utp_socket_impl::tick(now)`. If the
+     * One retransmission tick: the analogue of `utp_socket_impl::tick(now)`. If the
      * oldest unacked packet has gone unacknowledged for longer than [packetTimeoutMicros],
-     * an RTO has fired: every in-flight packet is retransmitted (go-back-N) and the
-     * backoff deepens. After [MAX_TIMEOUTS] fruitless rounds the socket is failed so a
-     * dead peer can't hang a reader forever. Built under [lock]; the resends go out after.
+     * an RTO has fired. We then retransmit every in-flight packet (go-back-N) and deepen
+     * the backoff. After [MAX_TIMEOUTS] fruitless rounds we fail the socket, so a dead
+     * peer cannot block a reader forever. Built under [lock]; the resends go out after.
      */
     suspend fun tick() {
         // A Nagle-held sub-MSS tail with no following write to merge with must not be stranded:
@@ -737,7 +737,7 @@ class UtpStream(
                     tick()
                 }
             } catch (_: Throwable) {
-                // scope cancelled — normal shutdown
+                // scope cancelled. This is a normal shutdown.
             }
         }
     }
@@ -792,8 +792,8 @@ class UtpStream(
 
     /**
      * Build the SACK bitmask for our current reorder buffer, or null if there's no hole.
-     * Bit `i` represents seq `ack_nr + 2 + i` (the bit for `ack_nr+1` is implicit — that's
-     * the very packet we're missing), LSB-first within each byte, length padded to a
+     * Bit `i` represents seq `ack_nr + 2 + i` (the bit for `ack_nr+1` is implicit, since
+     * that is the packet we're missing), LSB-first within each byte, length padded to a
      * multiple of 4 bytes. Exactly the layout libtorrent reads in `incoming_packet`. Hold
      * [lock].
      */
@@ -819,8 +819,9 @@ class UtpStream(
 
     /**
      * Apply a received SACK: mark every in-flight packet it acknowledges as [OutPacket.sacked]
-     * (so it's never resent) and return how many were acked — the loss evidence for the hole
-     * at `baseAck+1`. Bit `i` of the mask refers to seq `baseAck + 2 + i`. Hold [lock].
+     * (so it's never resent) and return how many were acked. That count is the loss evidence
+     * for the hole at `baseAck+1`. Bit `i` of the mask refers to seq `baseAck + 2 + i`.
+     * Hold [lock].
      */
     private fun applySackLocked(baseAck: Int, sack: ByteArray): Int {
         var sackedAbove = 0
@@ -838,7 +839,7 @@ class UtpStream(
         return sackedAbove
     }
 
-    /** The oldest in-flight packet the peer has *not* SACKed — the gap to fast-resend. Hold [lock]. */
+    /** The oldest in-flight packet the peer has *not* SACKed: the gap to fast-resend. Hold [lock]. */
     private fun pickFastResendLocked(): OutPacket? = outBuf.values.firstOrNull { !it.sacked }
 
     /**
@@ -866,8 +867,8 @@ class UtpStream(
             if (cwnd >= ssthresh) slowStart = false
         } else {
             // LEDBAT: scale the window by how far queuing delay sits from the 100 ms target.
-            // off_target > 0 (below target) grows the window; < 0 (above target) shrinks it —
-            // this is what makes uTP back off and yield to other traffic. ~1 MSS/RTT bound.
+            // off_target > 0 (below target) grows the window; < 0 (above target) shrinks it.
+            // That is how uTP backs off and yields to other traffic. ~1 MSS/RTT bound.
             val offTarget = (TARGET_DELAY_MICROS - currentQueuingDelay).toDouble()
             val windowFactor = acked.toDouble() / maxOf(cwnd, mss)
             val gain = mss.toDouble() * windowFactor * (offTarget / TARGET_DELAY_MICROS)
@@ -879,17 +880,17 @@ class UtpStream(
 
     /**
      * Fold one peer-reported delay [sample] (the `timestamp_difference` they echoed for our
-     * packets) into the LEDBAT estimate: track a rolling-minimum [baseDelay] — which cancels
-     * the constant offset between the two unsynchronised clocks — and derive the current
-     * queuing delay as `sample − baseDelay`. Hold [lock].
+     * packets) into the LEDBAT estimate. We track a rolling-minimum [baseDelay], which cancels
+     * the constant offset between the two unsynchronised clocks. The current queuing delay is
+     * then `sample − baseDelay`. Hold [lock].
      */
     private fun updateDelayLocked(sample: Long) {
         // Time-bucketed rolling minimum (libtorrent's delay_hist): the base delay is the
         // minimum one-way delay observed across a sliding set of ~1-minute buckets. Bucketing
         // by *time* (not sample count) keeps the window's real duration constant regardless of
         // packet rate, and rotating the buckets lets the base *rise* again to track slow clock
-        // drift between the two unsynchronised endpoints — a fixed all-time minimum would be
-        // pinned forever by one early lucky sample on a drifting clock.
+        // drift between the two unsynchronised endpoints. A fixed all-time minimum would stay
+        // pinned to one early low sample on a drifting clock.
         val now = nowMicros()
         if (baseBucketStartMicros == 0L) baseBucketStartMicros = now
         // advance buckets for any elapsed minute(s), dropping the oldest so the base can rise
@@ -915,8 +916,8 @@ class UtpStream(
     internal suspend fun feedDelayAndAckForTest(sampleMicros: Long, ackedBytes: Int) = lock.withLock {
         updateDelayLocked(sampleMicros)
         // The controller test drives the delay response directly without filling the window,
-        // so force the cwnd_saturated gate open — otherwise the gate (correctly) suppresses
-        // growth for an unsaturated link and the delay behaviour can't be observed.
+        // so force the cwnd_saturated gate open, otherwise the gate (correctly) suppresses
+        // growth for an unsaturated link and the test cannot observe the delay behaviour.
         growCwndLocked(ackedBytes, saturatedOverride = true)
     }
 
@@ -944,20 +945,21 @@ class UtpStream(
         slowStart = false
     }
 
-    /** Current congestion window in bytes — for tests/observability. */
+    /** Current congestion window in bytes, for tests and observability. */
     suspend fun congestionWindowBytes(): Int = lock.withLock { cwnd }
 
-    /** The current discovered maximum payload per packet (MSS) — for tests/observability. */
+    /** The current discovered maximum payload per packet (MSS), for tests and observability. */
     suspend fun currentMss(): Int = lock.withLock { mss }
 
     /** Non-suspending MSS read for the [write] hot path; the value only ever shrinks under [lock]. */
     private fun currentMssSync(): Int = mss
 
     /**
-     * Shrink the MSS one step toward the [MIN_MSS] floor — invoked when repeated RTOs suggest
-     * our packets are too large for the path (a poor-man's "fragmentation needed" without ICMP).
-     * The first timeout round is treated as ordinary loss; only sustained loss shrinks the MSS.
-     * Bounded: never below the floor, never grows back. Hold [lock].
+     * Shrink the MSS one step toward the [MIN_MSS] floor. [tick] calls this when repeated RTOs
+     * suggest our packets are too large for the path, standing in for the ICMP "fragmentation
+     * needed" signal we never see. The first timeout round counts as ordinary loss; only
+     * sustained loss shrinks the MSS. Bounded: never below the floor, never grows back.
+     * Hold [lock].
      */
     private fun shrinkMssOnLossLocked() {
         mtuShrinkRounds++
@@ -983,11 +985,11 @@ class UtpStream(
     /**
      * Flush any Nagle-held sub-MSS tail once the outstanding data it was waiting to coalesce
      * with has been acknowledged. Classic Nagle holds a small segment back only while there is
-     * unacked data in flight; the moment the network drains we must send it — otherwise the
-     * final tail of a transfer (which has no following [write] to merge with) would be stranded
-     * forever and a reader would hang waiting for bytes that never come. Driven by [tick] (so it
-     * fires within one ticker cadence even on an idle connection) and opportunistically off the
-     * ack path. No-op unless connected, Nagle is on, and the window has drained.
+     * unacked data in flight; the moment the network drains we must send it, otherwise the
+     * final tail of a transfer (which has no following [write] to merge with) would never go
+     * out and a reader would wait forever for bytes that never arrive. [tick] drives this (so
+     * it fires within one ticker cadence even on an idle connection), and the ack path calls
+     * it opportunistically. No-op unless connected, Nagle is on, and the window has drained.
      */
     private suspend fun flushNaglePending() {
         if (!nagleEnabled) return
@@ -1021,7 +1023,7 @@ class UtpStream(
     }
 
     companion object {
-        /** ACK_MASK from utp_stream.cpp — seq/ack numbers are 16-bit wrap counters. */
+        /** ACK_MASK from utp_stream.cpp: seq/ack numbers are 16-bit wrap counters. */
         const val ACK_MASK = 0xFFFF
 
         /** Our advertised receive window / the cwnd ceiling (bytes). */
@@ -1043,13 +1045,13 @@ class UtpStream(
         /** Consecutive RTO rounds before the first MSS shrink (treat the first round as plain loss). */
         const val MTU_SHRINK_AFTER = 2
 
-        /** Initial congestion window — two MSS, the conventional slow-start start. */
+        /** Initial congestion window: two MSS, the conventional slow-start start. */
         const val INIT_CWND = 2 * DEFAULT_MAX_PAYLOAD
 
-        /** Cap on cwnd growth (bytes). The peer's advertised `wnd_size` caps it further — see [awaitWindow]. */
+        /** Cap on cwnd growth (bytes). The peer's advertised `wnd_size` caps it further (see [awaitWindow]). */
         const val MAX_CWND = DEFAULT_SEND_WINDOW
 
-        /** LEDBAT target queuing delay — 100 ms, the BEP-29 / libtorrent `target_delay`. */
+        /** LEDBAT target queuing delay: 100 ms, the BEP-29 / libtorrent `target_delay`. */
         const val TARGET_DELAY_MICROS = 100_000L
 
         /** Duration of one base-delay bucket (~1 minute), matching libtorrent's delay-base update. */
@@ -1058,7 +1060,7 @@ class UtpStream(
         /** Number of live base-delay buckets kept (the rolling window the base-min spans). */
         const val BASE_DELAY_BUCKETS = 13
 
-        /** RTO floor (`min_timeout`) — 500 ms, matching libtorrent's `min_timeout`. */
+        /** RTO floor (`min_timeout`): 500 ms, matching libtorrent's `min_timeout`. */
         const val DEFAULT_MIN_TIMEOUT_MICROS = 500_000L
 
         /** Internal retransmission ticker cadence (ms). */
@@ -1100,9 +1102,9 @@ fun seqLessWrap(lhs: Int, rhs: Int, mask: Int = UtpStream.ACK_MASK): Boolean {
 /**
  * The default injected microsecond clock for [UtpStream]: a plain monotonically
  * increasing counter, so the core stays clockless and deterministic. Each call
- * returns the previous value plus one. Not a real wall/monotonic clock — peers that
- * compute one-way delay from our timestamps will see meaningless deltas, which is
- * fine because this core does not run delay-based congestion control anyway.
+ * returns the previous value plus one. This is not a real wall or monotonic clock.
+ * Peers that compute one-way delay from our timestamps will see meaningless deltas,
+ * which is fine because this core does not run delay-based congestion control anyway.
  */
 class MicrosCounter(start: Long = 0L) : () -> Long {
     private var n = start

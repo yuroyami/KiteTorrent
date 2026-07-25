@@ -3,13 +3,13 @@ package io.github.yuroyami.kitetorrent.peer
 import io.github.yuroyami.kitetorrent.PeerId
 
 /**
- * A single known peer of a torrent — the pure-Kotlin port of libtorrent's
+ * A single known peer of a torrent. The pure-Kotlin port of libtorrent's
  * `struct torrent_peer` (`include/libtorrent/torrent_peer.hpp`,
  * `src/torrent_peer.cpp`).
  *
  * A `torrent_peer` is **not** a connection. It is the long-lived bookkeeping
- * record for an endpoint we have heard about — from a tracker, the DHT, PEX,
- * LSD, resume data, or an incoming connection — whether or not we are connected
+ * record for an endpoint we have heard about (from a tracker, the DHT, PEX,
+ * LSD, resume data, or an incoming connection), whether or not we are connected
  * to it right now. The [PeerList] owns a sorted collection of these and uses
  * their counters to decide who to (re)connect to.
  *
@@ -25,7 +25,7 @@ import io.github.yuroyami.kitetorrent.PeerId
  * ### Field widths
  * libtorrent packs many of these into bit-fields (`failcount:5`,
  * `trust_points:4`, `source:6`, plus a wall of `bool:1`s) purely to shrink the
- * struct. We use ordinary [Int]/[Boolean] properties — the *semantics* are what
+ * struct. We use ordinary [Int]/[Boolean] properties. The *semantics* are what
  * matter, and we preserve the documented value ranges in the accessors that
  * mutate them (e.g. [failcount] saturates at 31, mirroring the 5-bit field).
  *
@@ -88,8 +88,8 @@ class TorrentPeer(
         internal set
 
     /**
-     * Session-time (seconds since session start) at which we last connected to —
-     * or disconnected from — this peer. 0 means "never". 16-bit in upstream.
+     * Session-time (seconds since session start) at which we last connected to
+     * (or disconnected from) this peer. 0 means "never". 16-bit in upstream.
      */
     var lastConnected: Int = 0
         internal set
@@ -150,7 +150,7 @@ class TorrentPeer(
         internal set
 
     /**
-     * Bitmap of [PeerSource] flags — every channel that has told us about this
+     * Bitmap of [PeerSource] flags: every channel that has told us about this
      * peer, OR-ed together. Drives [sourceRank] in connect ordering.
      */
     var source: Int = source and 0x3F // 6-bit field upstream
@@ -206,16 +206,16 @@ class TorrentPeer(
     /**
      * Total bytes downloaded from this peer (best estimate). With no live
      * connection layer in v0, this is simply [prevAmountDownload] scaled from kiB
-     * to bytes — the port of `torrent_peer::total_download`'s offline branch.
+     * to bytes. The port of `torrent_peer::total_download`'s offline branch.
      */
     fun totalDownload(): Long = prevAmountDownload.toLong() shl 10
 
-    /** Total bytes uploaded to this peer — see [totalDownload]. */
+    /** Total bytes uploaded to this peer. See [totalDownload]. */
     fun totalUpload(): Long = prevAmountUpload.toLong() shl 10
 
     /**
-     * The BEP 40 rank of this peer relative to our [external] address — the port
-     * of `torrent_peer::rank`. Computed lazily and cached in [peerRank]; returns
+     * The BEP 40 rank of this peer relative to our [external] address. The port
+     * of `torrent_peer::rank`. Computed lazily and cached in [peerRank]. Returns
      * 0 if either our address (of the matching family) or this peer's address is
      * unknown, which makes ranking a no-op tie for non-literal hosts.
      *
@@ -236,7 +236,7 @@ class TorrentPeer(
 
     /**
      * True if this peer's endpoint equals `(otherHost, otherPort)`. Endpoint
-     * identity is `(address, port)` — the port of the `torrent_peer_equal`
+     * identity is `(address, port)`. This is the port of the `torrent_peer_equal`
      * predicate for the IP case. Compares by parsed [address] when both hosts are
      * literal IPs (so `"127.0.0.1"` and `"127.000.000.001"` match), falling back
      * to string equality otherwise.

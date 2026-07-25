@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
  * run the *real* BitTorrent handshake and exchange a message over the resulting channel.
  * Because every byte after negotiation is RC4-streamed, a successful BitTorrent handshake
  * (whose pstr must decode to "BitTorrent protocol") is itself proof the two keystreams are
- * correctly derived and aligned — any drift would turn it into garbage and fail the decode.
+ * correctly derived and aligned. Any drift would corrupt the bytes and fail the decode.
  */
 class MseHandshakeTest {
 

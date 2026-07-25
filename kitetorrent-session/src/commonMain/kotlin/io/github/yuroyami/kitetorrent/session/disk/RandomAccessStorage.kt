@@ -1,13 +1,13 @@
 package io.github.yuroyami.kitetorrent.session.disk
 
 /**
- * Random-access file handle — the one thing a torrent client needs from the
+ * Random-access file handle. This is the one thing a torrent client needs from the
  * filesystem that has no common-stdlib equivalent: reading and writing at an
  * arbitrary byte offset. kotlinx-io's `FileSystem` is stream-oriented, so this is a
  * small platform `expect`/`actual` (RandomAccessFile on JVM/Android, POSIX
  * `fseeko`/`fread`/`fwrite` on Apple).
  *
- * This is the Tier-3 seam libtorrent fills with `pread`/`pwrite` (mmap_storage.cpp).
+ * libtorrent fills the same seam with `pread` and `pwrite` (mmap_storage.cpp).
  */
 expect class RandomAccessStorage(path: String) {
     /** Read up to [length] bytes at file [offset] into [into]; returns bytes read (may be < length at EOF). */

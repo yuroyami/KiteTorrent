@@ -2,7 +2,7 @@ package io.github.yuroyami.kitetorrent.stat
 
 /**
  * Aggregates the six byte-stream channels of a peer connection (or the whole
- * session) — pure-Kotlin port of libtorrent's `stat` (stat.hpp).
+ * session). The pure-Kotlin port of libtorrent's `stat` (stat.hpp).
  *
  * The six [StatChannel]s, indexed by the [Channel] enum, split traffic by
  * direction (upload / download) and class (BitTorrent payload, BitTorrent

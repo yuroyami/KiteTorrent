@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.peer
 
 /**
- * Maps non-overlapping port ranges to access flags — the port of
+ * Maps non-overlapping port ranges to access flags. This is the port of
  * `libtorrent::port_filter` (`src/ip_filter.cpp`,
  * `include/libtorrent/ip_filter.hpp`).
  *
@@ -46,7 +46,7 @@ class PortFilter {
     }
 
     /**
-     * Returns the flags set for [port] — `0` (allowed) or [BLOCKED]. Port of
+     * Returns the flags set for [port]: `0` (allowed) or [BLOCKED]. Port of
      * `port_filter::access`.
      *
      * @throws IllegalArgumentException if [port] is outside `0..65535`.

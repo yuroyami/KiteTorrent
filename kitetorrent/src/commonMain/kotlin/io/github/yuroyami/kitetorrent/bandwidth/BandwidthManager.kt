@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.bandwidth
 
 /**
- * Schedules bandwidth fairly across competing consumers — pure-Kotlin port of
+ * Schedules bandwidth fairly across competing consumers. This is a pure-Kotlin port of
  * libtorrent's `bandwidth_manager` (aux_/bandwidth_manager.hpp,
  * bandwidth_manager.cpp).
  *
@@ -14,7 +14,7 @@ package io.github.yuroyami.kitetorrent.bandwidth
  * [BandwidthSocket.assignBandwidth].
  *
  * This is the pure scheduling algorithm: the only outside interaction is the
- * [BandwidthSocket] callback, so it ports without any I/O or timers — the driver
+ * [BandwidthSocket] callback, so it ports without any I/O or timers. The driver
  * decides when to call [updateQuotas] and with what elapsed time.
  *
  * @param channel which direction this manager assigns (upload or download); passed
@@ -63,7 +63,7 @@ class BandwidthManager(private val channel: Int) {
      *
      * - returns [blk] immediately if the manager is *not* aborted and either there
      *   are no channels (unmetered) or none of the channels [BandwidthChannel.needQueueing]
-     *   — i.e. enough quota was already banked (and has been withdrawn for it);
+     *   (enough quota was already held, and has been withdrawn for it);
      * - otherwise enqueues the request and returns 0, signalling that the peer's
      *   [BandwidthSocket.assignBandwidth] will be called from a later [updateQuotas].
      *
@@ -85,7 +85,7 @@ class BandwidthManager(private val channel: Int) {
         }
 
         if (chans.isEmpty()) {
-            // Not rate limited by anything — satisfy immediately.
+            // Not rate limited by anything, so satisfy the request immediately.
             return blk
         }
 

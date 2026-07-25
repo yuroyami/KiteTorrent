@@ -13,12 +13,12 @@ import kotlin.test.assertTrue
  *
  * Two kinds of checks:
  *  1. The index arithmetic is pinned to the exact golden values from libtorrent's
- *     own `test/test_merkle.cpp` — these are integer ground truth, copied verbatim.
+ *     own `test/test_merkle.cpp`. These are integer ground truth, copied verbatim.
  *  2. The SHA-256 root computation is checked against *structural invariants*
  *     computed independently with the reused [Sha256]. Rather than hardcode opaque
  *     32-byte hash literals, we assert that the root of N leaves equals the explicit
- *     nested `SHA-256(left || right)` expression — which is exactly the algorithm's
- *     definition — so a regression in the folding logic is caught precisely.
+ *     nested `SHA-256(left || right)` expression, which is exactly the algorithm's
+ *     definition. A regression in the folding logic is therefore caught precisely.
  */
 class MerkleTest {
 
@@ -156,7 +156,7 @@ class MerkleTest {
 
     @Test
     fun rootOfSingleLeafIsTheLeaf() {
-        // A one-leaf tree's root IS that leaf — no hashing happens.
+        // A one-leaf tree's root IS that leaf. No hashing happens.
         val l0 = leaf(0)
         assertEquals(l0, Merkle.merkleRoot(listOf(l0)))
     }

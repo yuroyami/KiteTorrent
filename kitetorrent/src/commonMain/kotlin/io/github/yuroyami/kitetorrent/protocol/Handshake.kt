@@ -4,7 +4,7 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
 import io.github.yuroyami.kitetorrent.Digest32
 
 /**
- * The fixed BitTorrent peer-protocol handshake — the pure-Kotlin port of
+ * The fixed BitTorrent peer-protocol handshake. This is the pure-Kotlin port of
  * `bt_peer_connection::write_handshake()` (src/bt_peer_connection.cpp) and the
  * receive-side parsing in `bt_peer_connection::on_receive`/`recv_handshake`.
  *
@@ -18,10 +18,10 @@ import io.github.yuroyami.kitetorrent.Digest32
  *
  * The 8 [reserved] bytes carry capability flags negotiated by ANDing the two peers'
  * reserved blocks. libtorrent sets, in `write_handshake()`:
- *  - `reserved[7] |= 0x01` — DHT support (BEP-5),
- *  - `reserved[7] |= 0x04` — Fast extension (BEP-6),
- *  - `reserved[5] |= 0x10` — Extension protocol (BEP-10),
- *  - `reserved[7] |= 0x10` — v2 upgrade (BEP-52), set only for a v1 peer in a hybrid
+ *  - `reserved[7] |= 0x01`: DHT support (BEP-5),
+ *  - `reserved[7] |= 0x04`: Fast extension (BEP-6),
+ *  - `reserved[5] |= 0x10`: Extension protocol (BEP-10),
+ *  - `reserved[7] |= 0x10`: v2 upgrade (BEP-52), set only for a v1 peer in a hybrid
  *    torrent to advertise willingness to upgrade to the v2 protocol.
  *
  * (`reserved[7]` is the last byte; `reserved[5]` is the 6th byte / index 5.)
@@ -158,7 +158,7 @@ class Handshake(
         /**
          * Parse a 68-byte handshake. Returns null if [bytes] is shorter than
          * [LENGTH], if the length prefix is not 19, or if the protocol string does
-         * not match — i.e. the peer is not speaking BitTorrent v1. Bytes beyond
+         * not match, which means the peer is not speaking BitTorrent v1. Bytes beyond
          * [LENGTH] are ignored (they belong to subsequent messages on the stream).
          */
         fun decode(bytes: ByteArray): Handshake? {

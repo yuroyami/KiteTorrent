@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.picker
 
 /**
- * Identifies a single block within a piece — pure-Kotlin port of libtorrent's
+ * Identifies a single block within a piece. This is a pure-Kotlin port of libtorrent's
  * `piece_block` (include/libtorrent/piece_block.hpp).
  *
  * A *piece* is the unit the .torrent metadata hashes; a *block* is the unit a

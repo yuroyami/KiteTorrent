@@ -12,7 +12,7 @@ import kotlinx.coroutines.CancellationException
 import kotlin.random.Random
 
 /**
- * The live KRPC request/response manager — the coroutine port of libtorrent's
+ * The live KRPC request and response manager. This is the coroutine port of libtorrent's
  * `rpc_manager` (`src/kademlia/rpc_manager.cpp`) reduced to the one job that a
  * `commonMain` engine can carry: match an outgoing query to its reply.
  *
@@ -25,7 +25,7 @@ import kotlin.random.Random
  * [withTimeout]. The receive side ([dispatchResponse]) looks the id up and completes
  * the waiter.
  *
- * **Threading model — the libtorrent strand.** libtorrent runs the whole DHT on one
+ * **Threading model: the libtorrent strand.** libtorrent runs the whole DHT on one
  * `io_context` (effectively a single-threaded strand): there are never two concurrent
  * touches of `m_transactions`. We reproduce that contract rather than locking: this
  * manager and the [DhtNode] receive loop that drives it MUST share one
@@ -33,13 +33,13 @@ import kotlin.random.Random
  * confinement (e.g. `Dispatchers.Default.limitedParallelism(1)`, which [DhtNode]
  * arranges). All access to the [pending] map happens in non-suspending sections
  * between suspension points, so on that confined dispatcher it is race-free without a
- * mutex — and `commonMain` has no portable lock primitive to reach for anyway. The
+ * mutex, and `commonMain` has no portable lock primitive anyway. The
  * only suspension inside [query] (the `socket.send` and the `await`) happens *after*
  * the id is registered and *before* it is removed, so a reply can never arrive at an
  * unregistered waiter.
  *
  * **What this owns vs. what [DhtNode] owns.** This class is purely the *outgoing-query
- * bookkeeping* — the `m_transactions` map and the wire encode/decode of one datagram.
+ * bookkeeping*: the `m_transactions` map and the wire encoding and decoding of one datagram.
  * It does **not** run the socket receive loop and it does **not** answer inbound
  * queries; [DhtNode] owns the single `udp.receive()` loop and routes each parsed
  * [DhtMessage] either to [dispatchResponse] (responses/errors) or to its own
@@ -59,14 +59,14 @@ import kotlin.random.Random
  *    2-byte ids drawn at random per in-flight query the collision window is tiny, and
  *    [DhtNode] re-validates the responder's node id against its routing-table slot.
  *  - **Errors resolve the waiter too.** A `y:"e"` reply for a live id completes the
- *    deferred exceptionally with a [DhtProtocolException] rather than being dropped —
- *    the caller decides how to treat a protocol error (libtorrent logs and drops it).
+ *    deferred exceptionally with a [DhtProtocolException] rather than dropping it. The
+ *    caller decides how to treat a protocol error (libtorrent logs and drops it).
  */
 class DhtRpc(
     private val socket: DatagramTransport,
     /** RNG for transaction ids; inject a seeded one for deterministic tests. */
     private val random: Random = Random.Default,
-    /** Per-query reply timeout in ms. Default 15 000 — libtorrent's `rpc_manager` `timeout`. */
+    /** Per-query reply timeout in ms. Default 15 000, libtorrent's `rpc_manager` `timeout`. */
     private val timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
 ) {
     /**
@@ -77,12 +77,12 @@ class DhtRpc(
     private val pending = HashMap<Int, CompletableDeferred<DhtMessage.Response>>()
 
     /**
-     * Send the query [build] produced — a bencodable [Entry] envelope from
-     * `DhtMessage.build*Query(transactionId, …)` — to [host]:[port], then suspend until
+     * Send the query [build] produced (a bencodable [Entry] envelope from
+     * `DhtMessage.build*Query(transactionId, …)`) to [host]:[port], then suspend until
      * the matching response arrives or [timeoutMillis] elapses.
      *
      * The caller does **not** supply the transaction id: [query] mints a fresh unused
-     * one, hands it to [build], and uses the same bytes as the map key — exactly the
+     * one, hands it to [build], and uses the same bytes as the map key. That is exactly the
      * `rpc_manager::invoke` contract where the manager, not the algorithm, owns `t`.
      *
      * @param build given the freshly-minted 2-byte transaction id, returns the full
@@ -111,13 +111,13 @@ class DhtRpc(
     /**
      * Feed one already-parsed inbound [message] to the waiter table. Returns `true` if
      * it was a response/error that matched a live transaction id (and so was consumed
-     * here), `false` otherwise — in which case the caller ([DhtNode]) should treat it as
-     * an inbound query (or a stray/late reply) and handle it itself.
+     * here), and `false` otherwise. On `false` the caller ([DhtNode]) should treat it as
+     * an inbound query, or as a stray or late reply, and handle it itself.
      *
      * Port of the response branch of `rpc_manager::incoming`: look the id up, and if a
      * waiter exists complete it (or, for `y:"e"`, fail it with a [DhtProtocolException]).
      * A response whose id is not in the table is a late/duplicate reply and is dropped
-     * (`return false` — libtorrent logs "unknown transaction id").
+     * (`return false`; libtorrent logs "unknown transaction id").
      */
     fun dispatchResponse(message: DhtMessage): Boolean {
         when (message) {
@@ -170,7 +170,7 @@ class DhtRpc(
     /**
      * Mint a 2-byte transaction id not currently in flight. libtorrent draws a random
      * `std::uint16_t`; we do the same and, in the (vanishingly rare) event of a live
-     * collision, redraw — capping the attempts so a near-full table can't spin forever.
+     * collision, redraw. The attempts are capped so a near-full table cannot spin forever.
      */
     private fun allocateTransaction(): Pair<ByteArray, Int> {
         repeat(MAX_TID_ATTEMPTS) {

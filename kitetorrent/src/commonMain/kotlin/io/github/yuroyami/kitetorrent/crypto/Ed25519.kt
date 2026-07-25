@@ -81,7 +81,7 @@ object Ed25519 {
      */
     fun verify(signature: ByteArray, message: ByteArray, publicKey: ByteArray): Boolean {
         if (signature.size != 64 || publicKey.size != 32) return false
-        // S must be in [0, L) — reject high bit (matches `signature[63] & 224` and more).
+        // S must be in [0, L). Reject the high bit (matches `signature[63] & 224` and more).
         if (signature[63].toInt() and 0xe0 != 0) return false
 
         val a = decodePoint(publicKey) ?: return false

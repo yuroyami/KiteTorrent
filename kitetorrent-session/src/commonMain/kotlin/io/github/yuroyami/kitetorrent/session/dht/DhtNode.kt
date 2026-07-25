@@ -32,16 +32,16 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 /**
- * A live Kademlia DHT node (BEP-5) — the networked half of the DHT, wiring the pure
- * [RoutingTable] / [DhtMessage] / [DhtStorage] / [DhtItem] types to a UDP socket via
- * [DhtRpc] and [TraversalState]. Port of `dht::node` + `dht_tracker` + the
- * `find_data`/`get_peers` traversal algorithms.
+ * A live Kademlia DHT node (BEP-5). This is the networked half of the DHT. It wires the
+ * pure [RoutingTable], [DhtMessage], [DhtStorage] and [DhtItem] types to a UDP socket via
+ * [DhtRpc] and [TraversalState]. Port of `dht::node`, `dht_tracker` and the
+ * `find_data` and `get_peers` traversal algorithms.
  *
  * Drives the two things a client actually needs from the DHT: trackerless peer
  * discovery ([getPeers]) and re-announcing ourselves ([announce]); plus it answers
  * inbound queries so we are a good citizen of the network.
  *
- * @param clock supplies epoch-seconds for storage expiry/token rotation — the core is
+ * @param clock supplies epoch-seconds for storage expiry and token rotation. The core is
  *   clockless, so the platform passes one in (`{ System.currentTimeMillis()/1000 }`).
  */
 class DhtNode(
@@ -54,9 +54,10 @@ class DhtNode(
     private val clock: () -> Long = { 0L },
     /**
      * BEP-42 secure node-id enforcement (`enforce_node_id`). When true, a node whose id
-     * doesn't derive from its source IP is kept out of the routing table — anti-Sybil
-     * hardening. Off by default for compatibility with the many legacy nodes that don't
-     * use secure ids; hostnames (unverifiable) are always allowed.
+     * does not derive from its source IP is kept out of the routing table. This makes
+     * Sybil attacks harder. It is off by default for compatibility with the many legacy
+     * nodes that do not use secure ids. Hostnames cannot be verified, so they are always
+     * allowed.
      */
     private var enforceNodeId: Boolean = false,
     /**
@@ -75,9 +76,10 @@ class DhtNode(
     private val rpc = DhtRpc(socket)
 
     /**
-     * Per-source datagram counters for a crude DoS guard — the `dos_blocker`-lite of
-     * `node.cpp`. Reset every [DOS_WINDOW_SECONDS] by [maintain]; a source that exceeds
-     * [maxQueriesPerSource] inside one window is ignored until the next reset.
+     * Per-source datagram counters for a simple denial-of-service guard. This is a
+     * reduced version of the `dos_blocker` in `node.cpp`. [maintain] resets the counters
+     * every [DOS_WINDOW_SECONDS]. A source that exceeds [maxQueriesPerSource] inside one
+     * window is ignored until the next reset.
      */
     private val sourceQueryCounts = HashMap<String, Int>()
     private var dosWindowStart = clock()
@@ -298,7 +300,7 @@ class DhtNode(
                 }
             }
 
-            // BEP-44 get — hand back the stored item (immutable preferred, else mutable),
+            // BEP-44 get: return the stored item (immutable preferred, else mutable),
             // a write token, and the closest nodes. Port of the `get` branch of
             // node::incoming_request.
             is DhtMessage.Args.Get -> {
@@ -316,7 +318,7 @@ class DhtNode(
                 DhtMessage.buildItemResponse(tid, nodeId, token, item, nodes, includeValue = includeValue)
             }
 
-            // BEP-44 put — verify the write token, validate the item, store it (with
+            // BEP-44 put: verify the write token, validate the item, store it (with
             // CAS / old-sequence checks for a mutable put). Port of the `put` branch.
             is DhtMessage.Args.Put -> handlePut(tid, a, addrBytes)
 
@@ -373,10 +375,11 @@ class DhtNode(
         }
 
     /**
-     * Answer a query [DhtMessage.parse] could not model — currently only
+     * Answer a query [DhtMessage.parse] could not model. The only such query is
      * `sample_infohashes` (BEP-51). The reply carries `interval`, `num` (how many
-     * info-hashes we track), an (empty) `samples` blob, the write token and the closest
-     * nodes — a valid response even when we cannot enumerate the stored info-hashes.
+     * info-hashes we track), an empty `samples` blob, the write token and the closest
+     * nodes. That is a valid response even when we cannot enumerate the stored
+     * info-hashes.
      */
     private suspend fun handleRawQuery(raw: BdecodeNode, host: String, port: Int) {
         if (raw.type != BdecodeNode.Type.DICT) return
@@ -420,8 +423,8 @@ class DhtNode(
     // --- BEP-44 immutable / mutable get & put ------------------------------------
 
     /**
-     * Fetch a BEP-44 item from the DHT — the client port of `node::get_item` /
-     * `get_item`'s traversal. Runs a `get` traversal toward [target], merging closer
+     * Fetch a BEP-44 item from the DHT. This is the client port of `node::get_item`
+     * and its traversal. Runs a `get` traversal toward [target], merging closer
      * nodes from each reply, and returns the best item found (the highest-`seq` verified
      * mutable item, or the immutable item) together with the closest responders and their
      * write tokens (so a follow-up [putItem] can re-publish without a second lookup).
@@ -479,8 +482,9 @@ class DhtNode(
 
     /**
      * Result of [getItem]: the best item found (or null), the closest token-bearing nodes,
-     * and [observedSeq] — the highest mutable sequence number seen across responders (used
-     * as the `cas` value for a follow-up mutable [putItem]); null if nothing was found.
+     * and [observedSeq], the highest mutable sequence number seen across responders. Use
+     * that as the `cas` value for a following mutable [putItem]. It is null if nothing
+     * was found.
      */
     class GetItemResult(
         val item: DhtItem?,
@@ -489,7 +493,7 @@ class DhtNode(
     )
 
     /**
-     * Store a BEP-44 item in the DHT — the client port of `node::put_item`. It runs a
+     * Store a BEP-44 item in the DHT. This is the client port of `node::put_item`. It runs a
      * get→(optional cas)→put: a [getItem] traversal locates the closest nodes and their
      * write tokens, then a `put` is fired to each. For a mutable [item], the discovered
      * highest stored sequence number is supplied as `cas` so a concurrent writer can't be
@@ -570,7 +574,7 @@ class DhtNode(
     // --- maintenance -------------------------------------------------------------
 
     /**
-     * Periodic upkeep — the session-layer port of `node::tick` + `dht_tracker`'s timers.
+     * Periodic upkeep: the session-layer port of `node::tick` and `dht_tracker`'s timers.
      * Call on a steady cadence (libtorrent ticks the refresh timer every 5 s and the
      * storage/token timers on slower multiples; ~30 s is a sensible single cadence here):
      *
@@ -616,7 +620,7 @@ class DhtNode(
         refreshBuckets()
     }
 
-    /** Alias for [maintain] — naming symmetry with [DhtStorage.tick] / [DhtTokens]. */
+    /** Alias for [maintain], named to match [DhtStorage.tick] and [DhtTokens]. */
     suspend fun tick() = maintain()
 
     /**
@@ -647,8 +651,8 @@ class DhtNode(
     }
 
     /**
-     * For each active bucket, fire a `find_node` toward a random in-range id — the port of
-     * `node::send_single_refresh` over a non-full bucket. Keeps every bucket populated and
+     * For each active bucket, send a `find_node` toward a random in-range id. This is the
+     * port of `node::send_single_refresh` over a non-full bucket. Keeps every bucket populated and
      * exercises its nodes (timeouts evict via [nodeFailed]).
      */
     private suspend fun refreshBuckets() {
@@ -665,7 +669,7 @@ class DhtNode(
     }
 
     /**
-     * A random node id that shares our own id's top [bucket] bits — i.e. lands in bucket
+     * A random node id that shares our own id's top [bucket] bits, so it lands in bucket
      * [bucket] of our routing table. Port of `send_single_refresh`'s
      * `target = (random & ~mask) | (m_id & mask)` with `mask = generate_prefix_mask(bucket+1)`.
      */
@@ -685,9 +689,10 @@ class DhtNode(
     // --- announce re-announce ----------------------------------------------------
 
     /**
-     * Re-announce ourselves as a peer for every info-hash in [infoHashes] on [port] — the
-     * thing a session calls on its ~15-minute DHT announce interval. Just loops [announce];
-     * each announce is independent, so one failing won't stop the others.
+     * Re-announce ourselves as a peer for every info-hash in [infoHashes] on [port]. A
+     * session calls this on its DHT announce interval, roughly every 15 minutes. It loops
+     * over [announce]. Each announce is independent, so one failure does not stop the
+     * others.
      */
     suspend fun reannounce(infoHashes: Iterable<Sha1Hash>, port: Int) {
         for (ih in infoHashes) {
@@ -721,9 +726,9 @@ class DhtNode(
 
     /**
      * Serialize the node id and the live routing-table nodes into a bencoded blob the
-     * platform can persist and feed back to [restore] on next start — the KiteTorrent
-     * analogue of libtorrent's `dht_state` save (`save_state`/`dht_settings`). Only id +
-     * `(host, port)` of every live node is kept; ids are re-confirmed on the next
+     * platform can persist and pass back to [restore] on the next start. This is the
+     * KiteTorrent analogue of libtorrent's `dht_state` save (`save_state`, `dht_settings`).
+     * Only the id and `(host, port)` of every live node is kept; ids are re-confirmed on the next
      * bootstrap, so a stale node simply fails to answer and is dropped.
      */
     fun serialize(): ByteArray {
@@ -745,8 +750,8 @@ class DhtNode(
     /**
      * Restore known nodes from a [serialize] blob, re-seeding the routing table (they're
      * added un-pinged via [RoutingTable.heardAbout]; the next lookup confirms them). The
-     * node id is **not** changed here — id continuity is the constructor's / [enableSecureId]'s
-     * job — but the saved id is returned so a caller can reconstruct with it if desired.
+     * node id is **not** changed here. The constructor and [enableSecureId] own id
+     * continuity. The saved id is returned, so a caller can reconstruct with it.
      *
      * @return the persisted node id, or null if [data] was not a valid blob.
      */

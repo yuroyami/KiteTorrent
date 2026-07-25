@@ -4,8 +4,8 @@ import io.github.yuroyami.kitetorrent.Digest32
 import io.github.yuroyami.kitetorrent.Sha1Hash
 
 /**
- * Message Stream Encryption / Protocol Encryption (MSE/PE) — the pure-crypto half
- * of the obfuscated BitTorrent handshake.
+ * Message Stream Encryption / Protocol Encryption (MSE/PE). This is the pure-crypto
+ * half of the obfuscated BitTorrent handshake.
  *
  * This is a port of the key-derivation and framing constants that libtorrent
  * spreads across `src/pe_crypto.cpp` ([io.github.yuroyami.kitetorrent.crypto.Rc4],
@@ -19,8 +19,8 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
  * secret `S`. The torrent's v1 info-hash acts as the stream key `SKEY`. From `(S, SKEY)`
  * each side derives two RC4 keys and obfuscation hashes:
  *
- *  - `keyA = SHA1("keyA" + S + SKEY)`  — outgoing peer's encrypt key
- *  - `keyB = SHA1("keyB" + S + SKEY)`  — outgoing peer's decrypt key
+ *  - `keyA = SHA1("keyA" + S + SKEY)`: the outgoing peer's encrypt key
+ *  - `keyB = SHA1("keyB" + S + SKEY)`: the outgoing peer's decrypt key
  *
  * The roles swap by direction: the initiator (outgoing) encrypts with `keyA` and
  * decrypts with `keyB`; the receiver (incoming) does the reverse, so the two RC4
@@ -30,8 +30,9 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
  * The handshake is located/obfuscated on the wire with three SHA-1 hashes keyed
  * by the literal prefixes `"req1"`, `"req2"`, `"req3"`:
  *
- *  - sync hash       = `SHA1("req1" + S)`                       — [reqSyncHash]
- *  - obfuscated SKEY = `SHA1("req2" + SKEY) xor SHA1("req3" + S)` — [obfuscatedStreamKeyHash]
+ *  - sync hash, `SHA1("req1" + S)`, from [reqSyncHash]
+ *  - obfuscated SKEY, `SHA1("req2" + SKEY) xor SHA1("req3" + S)`, from
+ *    [obfuscatedStreamKeyHash]
  *
  * The verification constant ([VERIFICATION_CONSTANT]) is 8 zero bytes, RC4-encrypted
  * and matched by the peer to confirm the keys agree.
@@ -83,7 +84,7 @@ object MseCrypto {
     private val REQ3 = byteArrayOf('r'.code.toByte(), 'e'.code.toByte(), 'q'.code.toByte(), '3'.code.toByte())
 
     /**
-     * `keyA = SHA1("keyA" + S + SKEY)` — the 20-byte RC4 key used to *encrypt* by
+     * `keyA = SHA1("keyA" + S + SKEY)`: the 20-byte RC4 key used to *encrypt* by
      * the initiating (outgoing) peer and to *decrypt* by the receiving peer.
      *
      * @param secret the 96-byte DH shared secret `S` (big-endian, left-zero-padded
@@ -94,7 +95,7 @@ object MseCrypto {
         deriveKey(KEY_A, secret, streamKey)
 
     /**
-     * `keyB = SHA1("keyB" + S + SKEY)` — the 20-byte RC4 key used to *decrypt* by
+     * `keyB = SHA1("keyB" + S + SKEY)`: the 20-byte RC4 key used to *decrypt* by
      * the initiating (outgoing) peer and to *encrypt* by the receiving peer.
      */
     fun keyB(secret: ByteArray, streamKey: Sha1Hash): Sha1Hash =
@@ -136,7 +137,7 @@ object MseCrypto {
         return Hasher().update(REQ3).update(secret).final()
     }
 
-    /** `SHA1("req2" + SKEY)` — the un-obfuscated stream-key hash. */
+    /** `SHA1("req2" + SKEY)`: the un-obfuscated stream-key hash. */
     fun req2StreamKeyHash(streamKey: Sha1Hash): Sha1Hash =
         Hasher().update(REQ2).update(streamKey.toByteArray()).final()
 
@@ -174,10 +175,10 @@ object MseCrypto {
 }
 
 /**
- * Holds the two keyed RC4 streams for one MSE connection — port of libtorrent's
- * `rc4_handler`. One [Rc4] instance per direction; each is keyed and then has its
- * first [MseCrypto.RC4_DISCARD] (1024) keystream bytes thrown away, exactly as
- * `rc4_handler::set_outgoing_key` / `set_incoming_key` do.
+ * Holds the two keyed RC4 streams for one MSE connection, the port of libtorrent's
+ * `rc4_handler`. There is one [Rc4] instance per direction. Each is keyed, then its
+ * first [MseCrypto.RC4_DISCARD] (1024) keystream bytes are discarded, exactly as
+ * `rc4_handler::set_outgoing_key` and `set_incoming_key` do.
  *
  * RC4 is symmetric, so "encrypt" and "decrypt" are the same XOR-with-keystream
  * operation; they differ only in which stream (and thus which key) they advance.

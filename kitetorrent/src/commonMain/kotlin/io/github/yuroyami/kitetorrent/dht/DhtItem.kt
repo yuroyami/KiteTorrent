@@ -11,7 +11,7 @@ import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
 
 /**
  * The fixed-size ed25519 / sequence-number value types used by BEP-44 mutable DHT
- * items — port of libtorrent's `dht::public_key`, `dht::secret_key`,
+ * items. This is the port of libtorrent's `dht::public_key`, `dht::secret_key`,
  * `dht::signature` and `dht::sequence_number` (include/libtorrent/kademlia/types.hpp).
  *
  * libtorrent fixes these widths as `std::array<char, len>`; here they're plain
@@ -19,24 +19,24 @@ import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
  * [SIGNATURE_LEN]. The `sequence_number` is a 64-bit value, so a Kotlin [Long].
  */
 object DhtKeySizes {
-    /** ed25519 public key length — `public_key::len`. */
+    /** ed25519 public key length, from `public_key::len`. */
     const val PUBLIC_KEY_LEN = 32
 
-    /** ed25519 secret/private key length — `secret_key::len`. */
+    /** ed25519 secret (private) key length, from `secret_key::len`. */
     const val SECRET_KEY_LEN = 64
 
-    /** ed25519 signature length — `signature::len`. */
+    /** ed25519 signature length, from `signature::len`. */
     const val SIGNATURE_LEN = 64
 
     /**
-     * Maximum salt length the DHT will accept for a mutable put — libtorrent rejects
-     * a `salt` longer than this in `node::incoming_request` ("salt too big", 207).
+     * Maximum salt length the DHT will accept for a mutable put. libtorrent rejects a
+     * `salt` longer than this in `node::incoming_request` ("salt too big", 207).
      */
     const val MAX_SALT_LEN = 64
 
     /**
      * Maximum size of the bencoded `v` value libtorrent will store/sign for a DHT
-     * item — `node::incoming_request` rejects `v` larger than this ("message too
+     * item. `node::incoming_request` rejects a `v` larger than this ("message too
      * big", 205). The `assign` path asserts the bencoding fits in 1000 bytes.
      */
     const val MAX_VALUE_LEN = 1000
@@ -44,7 +44,7 @@ object DhtKeySizes {
 
 /**
  * Builds the canonical byte buffer that gets signed/verified for a BEP-44 mutable
- * item — direct port of the anonymous `canonical_string()` in
+ * item. This is a direct port of the anonymous `canonical_string()` in
  * src/kademlia/item.cpp.
  *
  * The layout is, with the salt omitted entirely when empty:
@@ -54,11 +54,11 @@ object DhtKeySizes {
  * Note that `<bencoded-value>` is spliced in verbatim: it must already be valid
  * bencoding (libtorrent asserts this). So for a string value "Hello World!" the
  * tail is `1:v12:Hello World!`, and the whole thing for seq=1 with no salt is
- * `3:seqi1e1:v12:Hello World!` — exactly the example in the BEP-44 spec.
+ * `3:seqi1e1:v12:Hello World!`, which is the example in the BEP-44 spec.
  *
  * libtorrent assembles this with `snprintf` into a fixed 1200-byte stack buffer; we
  * build it allocation-checked into a [ByteArrayBuilder]. The bytes produced are
- * identical, which is the whole point — they are the ed25519 message.
+ * identical, and that is what matters: they are the ed25519 message.
  */
 internal fun canonicalString(value: ByteArray, seq: Long, salt: ByteArray): ByteArray {
     // Pre-size: salt framing (~ "4:saltNN:" + salt) + seq framing + "1:v" + value.
@@ -84,7 +84,7 @@ internal fun canonicalString(value: ByteArray, seq: Long, salt: ByteArray): Byte
 object DhtItems {
 
     /**
-     * Target hash for an **immutable** item — `sha1_hash item_target_id(span<char
+     * Target hash for an **immutable** item, from `sha1_hash item_target_id(span<char
      * const> v)` in item.cpp. The argument is the *already bencoded* value; the
      * target is simply its SHA-1.
      */
@@ -92,7 +92,7 @@ object DhtItems {
         Sha1Hash.sha1(Sha1.hash(bencodedValue))
 
     /**
-     * Target hash for a **mutable** item — `sha1_hash item_target_id(span<char
+     * Target hash for a **mutable** item, from `sha1_hash item_target_id(span<char
      * const> salt, public_key const& pk)` in item.cpp:
      * `sha1(public_key || salt)` (salt omitted when empty).
      */
@@ -107,7 +107,7 @@ object DhtItems {
     }
 
     /**
-     * Produce an ed25519 signature over the canonical BEP-44 buffer — port of
+     * Produce an ed25519 signature over the canonical BEP-44 buffer. This is the port of
      * `signature sign_mutable_item(...)`. [bencodedValue] must be valid bencoding.
      */
     fun signMutableItem(
@@ -122,8 +122,8 @@ object DhtItems {
     }
 
     /**
-     * Verify an ed25519 signature over the canonical BEP-44 buffer — port of
-     * `bool verify_mutable_item(...)`.
+     * Verify an ed25519 signature over the canonical BEP-44 buffer. This is the port
+     * of `bool verify_mutable_item(...)`.
      */
     fun verifyMutableItem(
         bencodedValue: ByteArray,
@@ -140,7 +140,7 @@ object DhtItems {
 }
 
 /**
- * A DHT data item — port of `class dht::item` (item.cpp / item.hpp). An item is
+ * A DHT data item, the port of `class dht::item` (item.cpp, item.hpp). An item is
  * either **immutable** (target = SHA-1 of the bencoded value, BEP-44 §"Immutable
  * items") or **mutable** (target = SHA-1(public key + salt), signed by an ed25519
  * key, BEP-44 §"Mutable items").
@@ -155,7 +155,7 @@ sealed class DhtItem {
     /** The item's value as an editable [Entry]. */
     abstract val value: Entry
 
-    /** The exact bencoding of [value] — the bytes that travel as `a["v"]`. */
+    /** The exact bencoding of [value]: the bytes that travel as `a["v"]`. */
     abstract val bencodedValue: ByteArray
 
     /** True for a BEP-44 mutable (signed) item. */
@@ -166,7 +166,7 @@ sealed class DhtItem {
 }
 
 /**
- * An immutable BEP-44 item — `item(entry v)` in libtorrent. Its [target] is the
+ * An immutable BEP-44 item, `item(entry v)` in libtorrent. Its [target] is the
  * SHA-1 of the bencoded value, so the value cannot change without changing the key.
  */
 class ImmutableItem private constructor(
@@ -196,7 +196,7 @@ class ImmutableItem private constructor(
 }
 
 /**
- * A mutable BEP-44 item — the signed variant of `dht::item`. Holds the ed25519
+ * A mutable BEP-44 item: the signed variant of `dht::item`. It holds the ed25519
  * public key, a salt (possibly empty), a 64-bit sequence number and a signature
  * over [DhtItems.signMutableItem]'s canonical buffer.
  *
@@ -208,13 +208,13 @@ class ImmutableItem private constructor(
 class MutableItem private constructor(
     override val value: Entry,
     override val bencodedValue: ByteArray,
-    /** ed25519 public key, 32 bytes — `pk()`. */
+    /** ed25519 public key, 32 bytes, from `pk()`. */
     val publicKey: ByteArray,
-    /** Salt, possibly empty — `salt()`. */
+    /** Salt, possibly empty, from `salt()`. */
     val salt: ByteArray,
-    /** Sequence number — `seq()`. Defaults to 0 like libtorrent's `m_seq{0}`. */
+    /** Sequence number, from `seq()`. Defaults to 0 like libtorrent's `m_seq{0}`. */
     var seq: Long,
-    /** ed25519 signature, 64 bytes, or null until [sign]ed — `sig()`. */
+    /** ed25519 signature, 64 bytes, or null until [sign]ed. From `sig()`. */
     var signature: ByteArray?,
 ) : DhtItem() {
 
@@ -239,14 +239,14 @@ class MutableItem private constructor(
     val isSigned: Boolean get() = signature != null
 
     /**
-     * The exact bytes that are (or would be) signed — the BEP-44 canonical buffer
-     * for this item's value/seq/salt. Exposed so callers can audit or re-verify.
+     * The exact bytes that are (or would be) signed: the BEP-44 canonical buffer
+     * for this item's value, seq and salt. Exposed so callers can audit or re-verify.
      */
     fun signingBuffer(): ByteArray = canonicalString(bencodedValue, seq, salt)
 
     /**
      * Sign this item with the given ed25519 key pair, storing the resulting
-     * signature — mirrors `item::assign(entry v, salt, seq, pk, sk)`, which signs
+     * signature. This mirrors `item::assign(entry v, salt, seq, pk, sk)`, which signs
      * the bencoded value and remembers `m_sig`.
      *
      * @return the 64-byte signature (also stored in [signature]).
@@ -259,7 +259,7 @@ class MutableItem private constructor(
     }
 
     /**
-     * Verify this item's stored signature against its public key — port of the
+     * Verify this item's stored signature against its public key. This is the port of the
      * `verify_mutable_item` check in `item::assign(bdecode_node, salt, seq, pk,
      * sig)`. Returns false if unsigned.
      */
@@ -282,8 +282,8 @@ class MutableItem private constructor(
             MutableItem(value, Bencode.encode(value), publicKey.copyOf(), salt.copyOf(), seq, null)
 
         /**
-         * Rebuild a mutable item received over the wire, verifying its signature —
-         * port of `bool item::assign(bdecode_node const& v, salt, seq, pk, sig)`,
+         * Rebuild a mutable item received over the wire, verifying its signature.
+         * This ports `bool item::assign(bdecode_node const& v, salt, seq, pk, sig)`,
          * which returns false (here: null) when verification fails.
          *
          * [value] is the parsed `v` node; its [BdecodeNode.dataSection] is the exact

@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.settings
 
 /**
- * The integer-typed session settings — port of `settings_pack::int_types`
+ * The integer-typed session settings: a port of `settings_pack::int_types`
  * (`settings_pack.hpp`) together with the `int_settings` default-value table from
  * `settings_pack.cpp`.
  *

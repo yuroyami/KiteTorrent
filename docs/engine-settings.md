@@ -1,6 +1,6 @@
 # Engine settings
 
-Tune the KiteTorrent engine the way libtorrent does: through a ported `SettingsPack` plus a handful of direct engine knobs. This page covers the settings model, rate limiting, the TCP and uTP transports, the DHT node, trackers, proxies, encryption, and port mapping. Everything here is configured from shared Kotlin code and behaves the same on every target the session module ships for.
+Tune the KiteTorrent engine through a `SettingsPack` plus a few direct engine setters. This page covers the settings model, rate limiting, the TCP and uTP transports, the DHT node, trackers, proxies, encryption, and port mapping. You configure all of it from shared Kotlin code, and it behaves the same on every target the session module ships for.
 
 ## Where settings live
 
@@ -11,7 +11,7 @@ KiteTorrent has two kinds of configuration, and the split matters:
 | **Engine-level** | `KiteTorrentEngine(...)` constructor or direct setters | `listenPort`, `enableDht`, `enableUtp`, `httpTracker`, rate limits, connection cap |
 | **`SettingsPack`** | a `SettingsPack` passed at construction or applied later | `piece_timeout`, `request_queue_time`, `strict_end_game_mode`, `connections_limit` |
 
-The `SettingsPack` is the ported libtorrent knob bag. The engine reads its values (and falls back to libtorrent's own defaults when a key is unset). The constructor parameters that are not in `SettingsPack` — `peerId`, `listenPort`, `httpTracker`, `enableDht`, `enableUtp`, `clock`, `httpClient`, `gateway` — are engine wiring, not settings.
+`SettingsPack` holds the protocol and scheduler knobs. The engine reads its values, and falls back to libtorrent's defaults when a key is unset. Some constructor parameters are not in `SettingsPack` at all: `peerId`, `listenPort`, `httpTracker`, `enableDht`, `enableUtp`, `clock`, `httpClient` and `gateway`. Those are engine wiring, not settings.
 
 ```kotlin
 import io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine
@@ -35,7 +35,7 @@ engine.start()
 
 | Parameter | Default | What it does |
 |---|---|---|
-| `scope` | — | The `CoroutineScope` every engine coroutine runs in. |
+| `scope` | required | The `CoroutineScope` every engine coroutine runs in. |
 | `peerId` | random | The 20-byte peer ID advertised in handshakes. |
 | `listenPort` | `6881` | Requested TCP/UDP listen port. The actual port lands in `boundListenPort`. |
 | `httpTracker` | `null` | The `HttpTracker` used for `http://` and `https://` announces. Left null, those announces are skipped silently (see [Trackers](#trackers)). |
@@ -121,7 +121,7 @@ engine.applySettings(newPack)
 
 ## Rate limiting
 
-KiteTorrent ports libtorrent's `bandwidth_manager` and runs it live. There are two scopes:
+The engine runs a live bandwidth manager. There are two scopes:
 
 - **Session-wide**: one global cap shared across every torrent.
 - **Per-torrent**: each torrent draws from its own channel under the global one.
@@ -173,7 +173,7 @@ val utp   = engine.numUtpStreams()    // suspend: just the uTP streams
 ```
 
 !!! note "Congestion control"
-    The uTP stream runs LEDBAT: it tracks a rolling-minimum base delay, measures queuing delay against a 100 ms target, and scales the send window by how far the measurement sits from that target, so uTP backs off when the link starts queuing. Slow-start exits either at `ssthresh` or as soon as queuing delay crosses the target, and the window only grows while the writer is actually saturating it. Around that sit a retransmission timer with exponential backoff, go-back-N resend, selective ACK in both directions, duplicate-ACK fast resend, and Nagle coalescing.
+    The uTP stream runs LEDBAT. It tracks a rolling-minimum base delay and measures queuing delay against a 100 ms target. It then scales the send window by the distance between the measurement and that target, so uTP slows down when the link starts to queue. Slow-start exits either at `ssthresh` or as soon as queuing delay crosses the target, and the window only grows while the writer is actually saturating it. Around that sit a retransmission timer with exponential backoff, go-back-N resend, selective ACK in both directions, duplicate-ACK fast resend, and Nagle coalescing.
 
 ## DHT
 
@@ -215,7 +215,7 @@ The engine announces over both tracker transports:
 - **UDP** trackers via `UdpTracker` (BEP-15), which the engine builds itself.
 
 !!! warning "`httpTracker` defaults to null"
-    Both announce paths — the per-session one and `announceForPeers`, which backs `discoverPeers` and the single-argument `addMagnet` — call the tracker null-safely. An engine constructed without an `HttpTracker` therefore skips every `http://` and `https://` announce: no exception, no alert, no log entry, and no peers from those trackers. A magnet whose tracker list is entirely HTTP then finds nothing and `addMagnet` returns `null`.
+    There are two announce paths: the per-session one, and `announceForPeers`, which backs `discoverPeers` and the single-argument `addMagnet`. Both call the tracker null-safely. An engine constructed without an `HttpTracker` therefore skips every `http://` and `https://` announce. There is no exception, no alert, no log entry, and no peers from those trackers. A magnet whose tracker list is entirely HTTP then finds nothing, and `addMagnet` returns `null`.
 
 ```kotlin
 import io.github.yuroyami.kitetorrent.session.tracker.HttpTracker
@@ -229,7 +229,7 @@ val engine = KiteTorrentEngine(
 )
 ```
 
-`HttpTracker(client, maxResponseBytes, network)` takes the ktor `HttpClient` from you so the platform engine is your choice: `ktor-client-cio` on JVM and Android, `ktor-client-darwin` on iOS. The session module depends on `ktor-client-core` as `implementation` rather than `api`, so add `io.ktor:ktor-client-core` and a client engine to your own build (Ktor 3.5.1). `maxResponseBytes` bounds a tracker reply body at 2 MiB by default and rejects anything larger with `PACKET_TOO_LARGE`. `network` is what lets a plain `http://` announce go through a proxy; see [Proxies](#proxies).
+`HttpTracker(client, maxResponseBytes, network)` takes the ktor `HttpClient` from you, so the platform engine is your choice: `ktor-client-cio` on JVM and Android, `ktor-client-darwin` on iOS. The session module depends on `ktor-client-core` as `implementation` rather than `api`, so add `io.ktor:ktor-client-core` and a client engine to your own build (Ktor 3.5.1). `maxResponseBytes` bounds a tracker reply body at 2 MiB by default and rejects anything larger with `PACKET_TOO_LARGE`. `network` is what lets a plain `http://` announce go through a proxy. See [Proxies](#proxies).
 
 For most flows you do not touch the tracker classes directly; you add a torrent and the engine announces to the trackers in its metadata. When you do want to drive discovery by hand, the engine exposes it:
 
@@ -274,7 +274,7 @@ engine.setSocks4Proxy("127.0.0.1", 1080, username = "user")
 engine.setHttpProxy("proxy.example", 3128)
 ```
 
-!!! warning "The setters lose to the settings pack"
+!!! warning "The settings pack overrides the setters"
     `start()` and `applySettings()` both call `applyProxyFromSettings()`, and `proxy_type` defaults to `NONE`, which clears the proxy. A proxy set with `setSocks5Proxy` before `start()`, or before an `applySettings` call whose pack does not carry `PROXY_TYPE`, is discarded. Either set the proxy through the settings pack, or call the setter after `start()` and after every `applySettings`.
 
 With a SOCKS5 proxy the engine also opens a UDP ASSOCIATE relay and routes the shared UDP socket through it, so DHT traffic and uTP travel over the proxy on the same physical socket. SOCKS4 and HTTP CONNECT have no UDP mode, so UDP stays direct with those.
@@ -293,7 +293,7 @@ It does not require or force a proxy. With no proxy configured, the engine still
 
 ## Encryption (MSE)
 
-Message Stream Encryption runs on live connections in both directions. Outgoing dials go through `Mse.initiate`; inbound connections are sniffed with `Mse.looksLikePlaintextHandshake` and, when they are not plaintext, handed to `Mse.accept`. Two settings decide the policy, using libtorrent's `enc_policy` values (`EncPolicy.PE_FORCED`, `PE_ENABLED`, `PE_DISABLED`):
+Message Stream Encryption runs on live connections in both directions. Outgoing dials go through `Mse.initiate`. Inbound connections are checked with `Mse.looksLikePlaintextHandshake` and, when they are not plaintext, handed to `Mse.accept`. Two settings decide the policy, using the `enc_policy` values `EncPolicy.PE_FORCED`, `PE_ENABLED` and `PE_DISABLED`:
 
 | Setting | Effect |
 |---|---|
@@ -304,7 +304,7 @@ Message Stream Encryption runs on live connections in both directions. Outgoing 
 
 ## Port mapping
 
-To accept inbound connections behind a home router, the listen port needs to be forwarded. KiteTorrent ports both mapping protocols:
+To accept inbound connections behind a home router, the listen port needs to be forwarded. KiteTorrent implements both mapping protocols:
 
 - **UPnP**: `io.github.yuroyami.kitetorrent.session.net.Upnp`
 - **NAT-PMP**: `io.github.yuroyami.kitetorrent.session.net.NatPmp`
@@ -388,7 +388,7 @@ The settings model, rate limiter, both transports, the DHT node, both tracker ty
 
 uTP congestion control is in: LEDBAT against a 100 ms target delay, a retransmission timer with exponential backoff, go-back-N resend, selective ACK both ways, and duplicate-ACK fast resend, covered by `UtpLedbatTest`, `UtpCongestionTest`, `UtpRetransmitTest`, `UtpFastResendTest` and `UtpFlowControlTest`. Proxies are in: SOCKS5 including UDP ASSOCIATE, SOCKS4/4a and HTTP CONNECT, covered by `Socks5Test`, `Socks5UdpTest`, `Socks4Test`, `HttpProxyTest` and `HttpTrackerProxyTest`. MSE runs on live connections in both directions with plaintext sniffing on the inbound path, covered by `MseHandshakeTest` and `TwoEngineExchangeTest.twoEnginesExchangeWithEncryptionForced`.
 
-What is not here: there is no threaded disk cache (libtorrent 2.0 removed its own disk cache in favour of mmap, so the gap is narrower than it sounds), and the alert catalogue is 51 classes against libtorrent's roughly 100. The detailed map is in [About & status](about.md).
+What is not here: there is no threaded disk cache, so writes go straight through to the file handle with no batching. The alert catalogue has 51 concrete classes, so some events have no alert you can observe. The full list of limits is in [About and status](about.md).
 
 ## Related
 

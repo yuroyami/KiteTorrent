@@ -11,7 +11,8 @@ import kotlin.test.assertTrue
 /**
  * The BEP-42 routing-table admission gate used by [DhtNode]: when enforcement is off every
  * node is admitted (legacy compatibility); when on, only nodes whose id derives from their
- * source IP get in — anti-Sybil hardening. Hostnames can't be verified, so they're admitted.
+ * source IP get in. That is the anti-Sybil hardening. The gate cannot verify a hostname, so
+ * it admits any node given by name.
  */
 class SecureNodeIdGateTest {
 

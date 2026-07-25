@@ -70,7 +70,7 @@ class BigIntTest {
                 "aeb5f78671cbfb22106ae64c32c5bce4cfd4f5920da0ebc8b01eca9292ae3dba" +
                 "1b7a4a899da181390bb3bd1659c5c9defffffffffff6fa9d"
         )
-        // exponent 768 — i.e. 2 raised to the 768th power, reduced mod P.
+        // exponent 768, so 2 raised to the 768th power, reduced mod P.
         assertEquals(expected, BigInt.TWO.modPow(BigInt.fromInt(768), prime))
 
         // P > 2^255, so 2^255 mod P is just 2^255 (verifies no spurious reduction).

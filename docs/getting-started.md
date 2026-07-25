@@ -47,7 +47,7 @@ The session artifact depends on the core, so adding it pulls in both. Add it to 
     }
     ```
 
-The ktor lines are there because HTTP and HTTPS tracker announces need an `HttpTracker`, and its constructor takes a ktor `HttpClient`. The session artifact declares ktor as `implementation`, not `api`, so `HttpClient` is not on your compile classpath unless you add it. `ktor-client-cio` is the engine for JVM and Android; use `ktor-client-darwin` on iOS. Step 2 shows what happens if you skip this.
+The ktor lines are there because HTTP and HTTPS tracker announces need an `HttpTracker`. Its constructor takes a ktor `HttpClient`. The session artifact declares ktor as `implementation`, not `api`, so `HttpClient` is not on your compile classpath unless you add it. `ktor-client-cio` is the engine for JVM and Android. Use `ktor-client-darwin` on iOS. Step 2 shows what happens if you skip this.
 
 !!! note "Published to mavenLocal, not Maven Central"
 
@@ -93,7 +93,7 @@ engine.start()
 
 !!! warning "Without an `HttpTracker`, HTTP tracker announces do nothing"
 
-    The `httpTracker` parameter defaults to `null`, and both announce paths call it with `?.` — `httpTracker?.announce(url, req)`. With the default, an announce to an `http://` or `https://` tracker returns `null`: no request is sent, no exception is thrown, no alert is raised, and nothing is logged. Most public torrents list HTTP trackers, so an engine built as `KiteTorrentEngine(scope, enableDht = true)` will find no peers through them and report no error. Pass an `HttpTracker` as above. UDP trackers (`udp://`) work either way, since the engine binds those sockets itself.
+    The `httpTracker` parameter defaults to `null`, and both announce paths call it with `?.`, as `httpTracker?.announce(url, req)`. With the default, an announce to an `http://` or `https://` tracker returns `null`. No request is sent, no exception is thrown, no alert is raised, and nothing is logged. Most public torrents list HTTP trackers. An engine built as `KiteTorrentEngine(scope, enableDht = true)` therefore finds no peers through them and reports no error. Pass an `HttpTracker` as above. UDP trackers (`udp://`) work either way, because the engine binds those sockets itself.
 
 !!! note "The scope is the engine's lifetime"
 
@@ -124,7 +124,7 @@ val session = engine.addTorrent(
 // 3. onPieceVerified is a plain callback, so it cannot call the suspending progress().
 session.onPieceVerified = { piece -> println("piece $piece verified") }
 
-// 4. progress() suspends — read it from a coroutine.
+// 4. progress() suspends, so read it from a coroutine.
 scope.launch {
     while (!session.isSeeding()) {
         println("${(session.progress() * 100).toInt()}%")
@@ -145,7 +145,7 @@ scope.launch {
 
 ## Step 4: Download from a magnet link
 
-A magnet link carries no metadata, only an info-hash and some hints. The engine fetches the metadata from peers (via BEP-9 `ut_metadata`), then downloads normally. Because there is no `TorrentInfo` up front, you give `addMagnet` a factory that builds the disk back-end once the metadata arrives.
+A magnet link carries no metadata, only an info-hash and some hints. The engine fetches the metadata from peers (via BEP-9 `ut_metadata`), then downloads normally. There is no `TorrentInfo` at the start, so you give `addMagnet` a factory. It builds the disk back-end once the metadata arrives.
 
 ```kotlin
 import kotlinx.coroutines.Dispatchers
@@ -169,7 +169,7 @@ Once it returns non-null, the same `TorrentSession` API applies: attach `onPiece
 
 ## Step 5: Where files land, and running the tests
 
-The data goes wherever you pointed `FileDiskIo`. With `FileDiskIo(torrent.storage, "/downloads", Dispatchers.IO)`, a single-file torrent named `ubuntu.iso` lands at `/downloads/ubuntu.iso`; a multi-file torrent lands under `/downloads/<torrent-name>/...`, following the layout in `torrent.storage`. Files are sparse by default, so unfinished downloads do not reserve their full size up front.
+The data goes wherever you pointed `FileDiskIo`. With `FileDiskIo(torrent.storage, "/downloads", Dispatchers.IO)`, a single-file torrent named `ubuntu.iso` lands at `/downloads/ubuntu.iso`; a multi-file torrent lands under `/downloads/<torrent-name>/...`, following the layout in `torrent.storage`. Files are sparse by default, so an unfinished download does not reserve its full size in advance.
 
 To verify the library on your machine, run the test suites. The JVM path has 567 tests, including loopback integration tests that download between two real engines over real sockets. Expect one failure: `Socks5UdpTest.proxiedUdpSocketWrapsAndUnwrapsThroughRelay` times out reproducibly.
 

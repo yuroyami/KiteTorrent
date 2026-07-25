@@ -63,7 +63,7 @@ class BencodeTest {
 
     @Test
     fun binary_strings_survive_roundtrip() {
-        // bytes that are NOT valid UTF-8 — like a real `pieces` field
+        // bytes that are NOT valid UTF-8, like a real `pieces` field
         val raw = ByteArray(256) { it.toByte() }
         val encoded = Bencode.encode(Entry.of(raw))
         val node = Bdecode.decode(encoded)

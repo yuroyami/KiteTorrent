@@ -9,7 +9,7 @@ import io.github.yuroyami.kitetorrent.error.TorrentException
 import io.github.yuroyami.kitetorrent.util.UrlEscape
 
 /**
- * The pure, I/O-free half of the BEP-3 / BEP-23 / BEP-48 HTTP tracker protocol —
+ * The pure, I/O-free half of the BEP-3 / BEP-23 / BEP-48 HTTP tracker protocol,
  * the codec to libtorrent's `http_tracker_connection` (`src/http_tracker_connection.cpp`).
  *
  * Every function here is a total function of its arguments: [buildAnnounceUrl] and
@@ -17,7 +17,7 @@ import io.github.yuroyami.kitetorrent.util.UrlEscape
  * would emit, and [parseAnnounceResponse] / [parseScrapeResponse] turn a bencoded
  * response body into the shared [AnnounceResponse] / [ScrapeResponse] value objects.
  * [HttpTracker] layers ktor's `HttpClient` round-trip on top, so the wire-format
- * logic stays testable without a socket — mirroring how [UdpTrackerCodec] backs
+ * logic stays testable without a socket, mirroring how [UdpTrackerCodec] backs
  * `UdpTracker`.
  *
  * libtorrent splits the same work between two free functions in
@@ -33,7 +33,7 @@ import io.github.yuroyami.kitetorrent.util.UrlEscape
  *    with `key` as **upper-case** 8-digit hex (the lone `%08X` in libtorrent's
  *    `snprintf`) and `event` omitted entirely when it is [TrackerEvent.NONE].
  *  - the `event` token strings are `completed|started|stopped|paused`, selected by
- *    `event_string[event - 1]` — i.e. by the enum's wire [code][TrackerEvent.code],
+ *    `event_string[event - 1]`, i.e. by the enum's wire [code][TrackerEvent.code],
  *    not by declaration order.
  *  - a scrape URL is the announce URL with the **last** path segment `announce`
  *    rewritten to `scrape` (libtorrent finds the first `"announce"` substring; we
@@ -65,7 +65,7 @@ internal object HttpTrackerCodec {
      * porting the query-string assembly in `http_tracker_connection::start()`.
      *
      * The first parameter is joined with `?` or, if [announceUrl] already carries a
-     * query string, `&` — exactly libtorrent's `url.find('?')` test. `compact=1` and
+     * query string, `&`. This is exactly libtorrent's `url.find('?')` test. `compact=1` and
      * `no_peer_id=1` are always sent (BEP-23); `key` is emitted as upper-case
      * `%08X`; `corrupt` is sent as `0` to match libtorrent's always-present field.
      *
@@ -341,7 +341,7 @@ internal object HttpTrackerCodec {
 }
 
 /**
- * Thrown when a tracker returns a `failure reason` member (BEP-3) — the typed
+ * Thrown when a tracker returns a `failure reason` member (BEP-3), the typed
  * counterpart of libtorrent setting `resp.failure_reason` and raising the
  * `errors::tracker_failure` code. Carries both the human-readable [reason] text the
  * tracker sent and the corresponding [error] code ([LibtorrentError.TRACKER_FAILURE]),

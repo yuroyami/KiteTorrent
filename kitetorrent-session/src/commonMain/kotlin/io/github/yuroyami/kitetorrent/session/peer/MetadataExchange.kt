@@ -13,28 +13,28 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Fetch a torrent's metadata (the `info` dict) from a peer over BEP-9 (`ut_metadata`),
- * negotiated via the BEP-10 extension handshake — i.e. how a download starts from a
+ * negotiated via the BEP-10 extension handshake. This is how a download starts from a
  * magnet link, where we have only the info-hash. Port of libtorrent's `ut_metadata`
  * plugin driving `metadata_transfer`.
  *
  * The owning [pc] must already have completed the BitTorrent handshake with the
- * extension bit set, and must have been created with `numPieces = 0` (we don't know the
- * piece count until the metadata arrives — [PeerConnection] tolerates an unknown-size
- * bitfield in that mode).
+ * extension bit set, and must have been created with `numPieces = 0`, because we do not
+ * know the piece count until the metadata arrives. [PeerConnection] tolerates an
+ * unknown-size bitfield in that mode.
  */
 class MetadataExchange(
     private val pc: PeerConnection,
     /**
      * The info-hash the received metadata must verify against. A 20-byte digest is treated as a
      * BEP-3 v1 (SHA-1) hash; a 32-byte digest as a BEP-52 v2 (SHA-256) hash. For a hybrid magnet
-     * pass whichever hash the magnet carried — verification dispatches by width
+     * pass whichever hash the magnet carried. Verification dispatches by width
      * ([MetadataTransfer.verify]), so a v2-only (btmh) magnet verifies via SHA-256.
      */
     private val infoHash: Digest32,
 ) {
     /**
-     * Run the exchange and return the raw, verified `info`-dict bytes (whose SHA-1 — or SHA-256
-     * for a v2 hash — equals [infoHash]), or null if the peer can't/won't provide them within
+     * Run the exchange and return the raw, verified `info`-dict bytes (whose SHA-1, or SHA-256
+     * for a v2 hash, equals [infoHash]), or null if the peer can't/won't provide them within
      * [timeoutMillis].
      */
     suspend fun fetch(timeoutMillis: Long = 30_000): ByteArray? = coroutineScope {

@@ -10,9 +10,9 @@ import kotlin.test.assertTrue
 /**
  * MSE/PE ([MseCrypto] / [MseEncryption]) key-derivation and framing tests.
  *
- * The golden SHA-1 values below were computed independently (CPython `hashlib`)
- * over the documented MSE inputs — `SHA1("keyA"|"keyB"|"req1"|"req2"|"req3" + ...)`
- * — for a fixed deterministic shared secret `S` and stream key `SKEY`, so the test
+ * A separate tool (CPython `hashlib`) produced the golden SHA-1 values below, over
+ * the documented MSE inputs (`SHA1("keyA"|"keyB"|"req1"|"req2"|"req3" + ...)`) for a
+ * fixed deterministic shared secret `S` and stream key `SKEY`. The test therefore
  * pins the actual derivation, not just self-consistency.
  */
 class MseCryptoTest {

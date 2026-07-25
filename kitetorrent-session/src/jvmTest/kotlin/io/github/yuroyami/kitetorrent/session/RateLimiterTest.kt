@@ -17,7 +17,7 @@ import kotlinx.coroutines.yield
  * The [RateLimiter] adapter over the ported `bandwidth_manager`: unlimited
  * channels grant instantly, limited ones park the acquirer until [RateLimiter.update]
  * rounds (the `update_quotas` cadence) have refilled enough quota, and [RateLimiter.close]
- * releases everything. Updates are driven manually so the test is deterministic —
+ * releases everything. The test drives updates manually to stay deterministic, with
  * no wall-clock timing involved.
  */
 class RateLimiterTest {
@@ -45,12 +45,12 @@ class RateLimiterTest {
         repeat(10) { yield() }
         assertFalse(granted, "25k against an empty 10k/s bucket must queue")
 
-        limiter.update(1_000) // +10k — not enough
+        limiter.update(1_000) // +10k: not enough
         repeat(10) { yield() }
         assertFalse(granted)
 
-        limiter.update(1_000) // +10k = 20k — still short
-        limiter.update(1_000) // +10k = 25k assigned — dispatched
+        limiter.update(1_000) // +10k = 20k, still short
+        limiter.update(1_000) // +10k = 25k assigned, so it is dispatched
         withTimeout(2_000) { job.join() }
         assertTrue(granted, "three seconds of quota must satisfy a 25k request at 10k/s")
 
@@ -92,7 +92,7 @@ class RateLimiterTest {
         assertFalse(job.isCompleted)
 
         limiter.close()
-        withTimeout(2_000) { job.join() } // released with whatever it had — no hang
+        withTimeout(2_000) { job.join() } // released with whatever it had, so no hang
         workers.cancel()
     }
 }

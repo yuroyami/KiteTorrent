@@ -128,7 +128,7 @@ class UdpTrackerCodecTest {
 
     @Test
     fun eventCodesMatchProtocol() {
-        // none=0, completed=1, started=2, stopped=3 — fixed by BEP-15 / event_t ordinals.
+        // none=0, completed=1, started=2, stopped=3, fixed by BEP-15 and the event_t ordinals.
         assertEquals(0, TrackerEvent.NONE.code)
         assertEquals(1, TrackerEvent.COMPLETED.code)
         assertEquals(2, TrackerEvent.STARTED.code)
@@ -208,7 +208,7 @@ class UdpTrackerCodecTest {
 
     @Test
     fun announceResponseRejectsPartialPeerRecord() {
-        // peer region is 7 bytes — not a multiple of the 6-byte stride → invalid length
+        // peer region is 7 bytes, not a multiple of the 6-byte stride → invalid length
         val tid = 9
         val response = concat(
             be32(1), be32(tid), be32(1800), be32(0), be32(0),

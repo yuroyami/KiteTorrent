@@ -29,8 +29,8 @@ import kotlin.test.assertTrue
 
 /**
  * Proves magnet-style start: a peer that has the `info` dict serves it over BEP-9
- * `ut_metadata` (negotiated by the BEP-10 extension handshake), and a [MetadataExchange]
- * — which begins with only the info-hash, as a magnet link does — fetches, reassembles,
+ * `ut_metadata` (negotiated by the BEP-10 extension handshake). A [MetadataExchange]
+ * that begins with only the info-hash, as a magnet link does, then fetches, reassembles
  * and verifies it. The recovered bytes must be byte-identical to the original info dict
  * and hash back to the info-hash.
  */

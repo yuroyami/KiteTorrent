@@ -1,6 +1,6 @@
 # About KiteTorrent
 
-**A pure-Kotlin BitTorrent engine for every target.** KiteTorrent is a from-scratch port of [libtorrent](https://github.com/arvidn/libtorrent) (Rasterbar) to Kotlin Multiplatform: no JNI, no cinterop, no native blob. One Kotlin codebase handles bencoding, hashing, `.torrent` and magnet parsing, the wire protocol, the piece picker, the DHT, trackers, and the live download/seed session across Android, iOS, JVM, and (for the pure core) the browser.
+**A pure-Kotlin BitTorrent engine for every target.** KiteTorrent is a Kotlin Multiplatform reimplementation of [libtorrent](https://github.com/arvidn/libtorrent) (Rasterbar): no JNI, no cinterop, no native blob. One Kotlin codebase handles bencoding, hashing, `.torrent` and magnet parsing, the wire protocol, the piece picker, the DHT, trackers, and the live download and seed session. It runs on Android, iOS, the JVM, and, for the pure core, the browser.
 
 ## How it is put together
 
@@ -13,9 +13,9 @@ BitTorrent is networking, concurrency and disk I/O, and there is no stdlib-only 
 
 The core never pretends to do something it cannot. See [Platform support](platforms.md) for the full matrix.
 
-## Current Status
+## Current status
 
-KiteTorrent is **pre-1.0** and actively developed. It **downloads, seeds, and starts from magnet links, end-to-end.** The JVM path runs **567 tests** — 462 in the core's common suite, 105 in the session module — of which 566 pass; `Socks5UdpTest.proxiedUdpSocketWrapsAndUnwrapsThroughRelay` times out reproducibly. The suite includes loopback integration tests over real sockets:
+KiteTorrent is **pre-1.0** and actively developed. It **downloads, seeds, and starts from magnet links, end-to-end.** The JVM path runs **567 tests**: 462 in the core's common suite and 105 in the session module. 566 pass. `Socks5UdpTest.proxiedUdpSocketWrapsAndUnwrapsThroughRelay` times out reproducibly. The suite includes loopback integration tests over real sockets:
 
 - A TCP download from a seeder
 - Two KiteTorrent engines exchanging a torrent, in plaintext and with MSE forced, then doing it again entirely over µTP
@@ -25,55 +25,53 @@ KiteTorrent is **pre-1.0** and actively developed. It **downloads, seeds, and st
 - A real-file `FileDiskIo` round-trip
 - Adversarial runs against a scripted peer that *withholds* blocks, proving the end-game duplication, `cancel`, and snubbing machinery recover
 
-Correctness is anchored to ground truth, not just "it compiles":
+Correctness is checked against published reference data:
 
 - **FIPS vectors** for SHA-1/256/512
 - **RFC 8032** for ed25519
-- **Real torrents from libtorrent's own test suite**, with info-hashes cross-checked against an independent implementation
+- **Real torrent files**, with info-hashes cross-checked against an independent implementation
 - **BEP golden bytes** for the DHT, ut_pex, and the UDP tracker
 
 !!! note "What end-to-end means here"
-    Two engines, started cold, can hand a torrent to each other over real sockets and verify every piece against its hash, for both TCP and µTP and for both `.torrent` and magnet starts. These are local Gradle runs. `.github/workflows/` contains only `docs.yml`, so nothing runs the test suites on push.
+    Two engines, started cold, can hand a torrent to each other over real sockets and verify every piece against its hash. That holds for both TCP and µTP, and for both `.torrent` and magnet starts. These are local Gradle runs. `.github/workflows/` contains only `docs.yml`, so nothing runs the test suites on push.
 
 ## Known defects
 
 These ship today and fail silently. If you are building against KiteTorrent, read this section first.
 
-- **HTTP and HTTPS tracker announces do nothing unless you pass an `HttpTracker`.** `KiteTorrentEngine`'s `httpTracker` parameter defaults to `null`, and both announce paths are null-safe calls. Nothing throws, nothing is logged, no alert is posted. Most public torrents list HTTP trackers, so the engine finds no peers and gives no reason. See [Getting started](getting-started.md).
-- **`FileDiskIo` cannot resume or seed from data already on disk.** Its `checkExistingFiles()` returns an all-`false` array, and the recheck that `addTorrent` runs internally consults exactly that array. Point it at a complete copy and the session reports zero pieces and re-downloads the whole torrent over the existing files. Call `session.recheck(full = true)` after `addTorrent`. See [Seeding](seeding.md).
+- **HTTP and HTTPS tracker announces do nothing unless you pass an `HttpTracker`.** `KiteTorrentEngine`'s `httpTracker` parameter defaults to `null`, and both announce paths are null-safe calls. Nothing throws, nothing is logged, no alert is posted. Most public torrents list HTTP trackers, so you see an engine that finds no peers and gives no reason. See [Getting started](getting-started.md).
+- **`FileDiskIo` cannot resume or seed from data already on disk.** Its `checkExistingFiles()` returns an all-`false` array, and the recheck that `addTorrent` runs internally reads exactly that array. Point it at a complete copy and the session reports zero pieces and downloads the whole torrent again over the existing files. Call `session.recheck(full = true)` after `addTorrent`. See [Seeding](seeding.md).
 - **`progress()` counts pieces, not bytes, and does not exclude filtered pieces.** Any file set to `IGNORE` priority means `progress()` can never reach `1.0`, and `isSeeding()` never becomes true either.
 - **`FileDiskIo`'s `dispatcher` parameter defaults to `Dispatchers.Default`**, putting blocking file syscalls on the CPU dispatcher. Pass `Dispatchers.IO`.
-- **`anonymous_mode` does not force a proxy.** It skips the inbound listen socket, skips UPnP and NAT-PMP, and randomises the per-torrent peer id. Nothing refuses to dial when no proxy is configured.
+- **`anonymous_mode` does not force a proxy.** It skips the inbound listen socket, skips UPnP and NAT-PMP, and randomizes the per-torrent peer id. Nothing refuses to dial when no proxy is configured.
 
-## What's next
+## Current limits
 
-The core port is functionally complete and interoperable. The component-by-component map of what is done and what remains lives in [PORTING_STATUS.md](https://github.com/yuroyami/KiteTorrent/blob/main/PORTING_STATUS.md). The remaining work:
+These are not defects. They are gaps you may hit, and work that is planned:
 
-- **A threaded disk cache.** `DiskIo` is a suspending interface and `FileDiskIo` writes straight through to the file handle. There is no batching or write-back. libtorrent 2.0 removed its own disk cache in favour of mmap, so this is a smaller gap than it sounds.
-- **The long-tail alert catalogue.** 51 alert classes are ported against libtorrent's roughly 100.
-- **Path-MTU probing for µTP.** The MSS starts at 1400 and only shrinks — 64 bytes after two consecutive timeout rounds, floor 1212 — and never grows back. libtorrent runs a full `[mtu_floor, mtu_ceiling]` search.
-- **Test coverage for the real-file disk layer.** `FileDiskIoTest` has one test, and every engine-level integration test uses `InMemoryDiskIo`. That is how the `checkExistingFiles` defect above shipped.
-- **A fix for `Socks5UdpTest`.** It times out after 15 seconds in `UdpSocket.receive` against its own loopback relay, on every run.
-- **A CI workflow that runs the tests.**
-
-Four items that earlier versions of this page listed as outstanding have since landed: LEDBAT congestion control and retransmission for µTP, BitTorrent v2 hash requests, MSE encryption in both directions, and SOCKS4/SOCKS5/HTTP proxies.
+- **No threaded disk cache.** `DiskIo` is a suspending interface and `FileDiskIo` writes straight through to the file handle. There is no batching and no write-back cache.
+- **A partial alert catalogue.** 51 concrete alert classes exist, so some events have no alert you can observe.
+- **No path-MTU probing for µTP.** The MSS starts at 1400 and only shrinks: 64 bytes after two consecutive timeout rounds, down to a floor of 1212. It never grows back.
+- **Thin test coverage for the real-file disk layer.** `FileDiskIoTest` has one test, and every engine-level integration test uses `InMemoryDiskIo`. That is how the `checkExistingFiles` defect above went unnoticed.
+- **A failing proxy test.** `Socks5UdpTest` times out after 15 seconds in `UdpSocket.receive` against its own loopback relay, on every run.
+- **No CI workflow that runs the tests.**
 
 ## Reporting bugs
 
-If a download stalls, a torrent fails to parse, or a peer interaction misbehaves, [open an issue](https://github.com/yuroyami/KiteTorrent/issues) with enough detail to reproduce: the `.torrent` or magnet link, the engine settings, and the alerts you observed. Networking code keeps its parse and build logic in pure, testable functions, so most fixes can land as a unit test plus a regression at the engine integration level.
+If a download stalls, a torrent fails to parse, or a peer interaction misbehaves, [open an issue](https://github.com/yuroyami/KiteTorrent/issues) with enough detail to reproduce it: the `.torrent` or magnet link, the engine settings, and the alerts you observed. Networking code keeps its parse and build logic in pure, testable functions. Most fixes can therefore land as a unit test plus a regression test at the engine integration level.
 
 ## Contributing
 
-Contributions are welcome. Check the [GitHub repository](https://github.com/yuroyami/KiteTorrent) for open issues and the porting status. Test additions, protocol fixes, and porting the remaining libtorrent surface are especially valuable. The [API reference](https://yuroyami.github.io/KiteTorrent/api/) is the place to confirm a signature before you build against it.
+Contributions are welcome. Check the [GitHub repository](https://github.com/yuroyami/KiteTorrent) for open issues. Test additions and protocol fixes are especially valuable. The component-by-component map for contributors is [PORTING_STATUS.md](https://github.com/yuroyami/KiteTorrent/blob/main/PORTING_STATUS.md). The [API reference](https://yuroyami.github.io/KiteTorrent/api/) is the place to confirm a signature before you build against it.
 
-## License & credits
+## License and credits
 
-KiteTorrent is a derivative work of **libtorrent** by Arvid Norberg and contributors, distributed under the **BSD-3-Clause** license. The original copyright notices are retained per-file wherever code is ported directly. This port, meaning the Kotlin translation and the architecture around it, is provided under the same BSD-3-Clause terms.
+KiteTorrent is a derivative work of **libtorrent** by Arvid Norberg and contributors, distributed under the **BSD-3-Clause** license. The original copyright notices are kept per file wherever code was translated directly. The Kotlin code and the architecture around it use the same BSD-3-Clause terms.
 
 This is an independent reimplementation. It is not affiliated with or endorsed by the libtorrent project.
 
 ## Acknowledgements
 
-- **libtorrent** by Arvid Norberg and contributors: the reference implementation this project ports from, pinned to RC_2_0 (2.0.12)
+- **libtorrent** by Arvid Norberg and contributors: the reference implementation, pinned to RC_2_0 (2.0.12)
 - **The BEP authors**: the BitTorrent Enhancement Proposals that define the protocol and its extensions
-- **The FIPS and RFC 8032 test vectors**, and the BEP golden bytes, that let this port check itself against ground truth
+- **The FIPS and RFC 8032 test vectors**, and the BEP golden bytes, that let this project check itself against published results

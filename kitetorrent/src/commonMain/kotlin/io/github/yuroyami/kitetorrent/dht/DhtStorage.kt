@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.dht
 import io.github.yuroyami.kitetorrent.Sha1Hash
 
 /**
- * In-memory DHT data store — a pure-Kotlin port of libtorrent's
+ * In-memory DHT data store. This is a pure-Kotlin port of libtorrent's
  * `dht_default_storage` (`src/kademlia/dht_storage.cpp`). It holds the three things
  * a DHT node serves:
  *
@@ -20,10 +20,10 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
  * and deterministically testable.
  *
  * **Scope.** This is the data structure only. The transport-side machinery in
- * `node::incoming_request` — write-token generation/verification, BEP-42 id checks,
- * the `infohashes_sample` for BEP-51, the popularity-based eviction
- * (`pick_least_important_item`) and the `dht_max_*` capacity caps — lives in the
- * node layer and is intentionally not duplicated here. [maxPeersPerTorrent] and
+ * `node::incoming_request` lives in the node layer and is not duplicated here. That
+ * covers write-token generation and verification, BEP-42 id checks, the
+ * `infohashes_sample` for BEP-51, the popularity-based eviction
+ * (`pick_least_important_item`) and the `dht_max_*` capacity caps. [maxPeersPerTorrent] and
  * [maxItems] provide the same drop-when-full behaviour the settings drive upstream.
  */
 class DhtStorage(
@@ -35,7 +35,7 @@ class DhtStorage(
     val maxTorrents: Int = DEFAULT_MAX_TORRENTS,
 ) {
 
-    /** One announced peer — port of the anonymous `peer_entry` in dht_storage.cpp. */
+    /** One announced peer: the port of the anonymous `peer_entry` in dht_storage.cpp. */
     class PeerEntry(
         /** The peer's endpoint (address + port). */
         val endpoint: DhtEndpoint,
@@ -45,7 +45,7 @@ class DhtStorage(
         var seed: Boolean,
     )
 
-    /** One tracked torrent — port of the anonymous `torrent_entry`. */
+    /** One tracked torrent: the port of the anonymous `torrent_entry`. */
     private class TorrentEntry {
         /** Optional torrent name (`a["n"]`), capped at 100 chars like libtorrent. */
         var name: String? = null
@@ -59,7 +59,7 @@ class DhtStorage(
         fun isEmpty(): Boolean = peers4.isEmpty() && peers6.isEmpty()
     }
 
-    /** The last time (epoch-seconds) an item was heard about — for [tick] expiry. */
+    /** The last time (epoch-seconds) an item was seen. [tick] uses it to expire items. */
     private class ItemSlot(val item: DhtItem, var lastSeen: Long)
 
     private val torrents = LinkedHashMap<Sha1Hash, TorrentEntry>()
@@ -83,7 +83,7 @@ class DhtStorage(
     // --- peers (announce_peer / get_peers) ---------------------------------------
 
     /**
-     * Record an `announce_peer` — port of `dht_default_storage::announce_peer`. The
+     * Record an `announce_peer`, the port of `dht_default_storage::announce_peer`. The
      * peer is keyed by address family; re-announcing the same endpoint refreshes its
      * timestamp/seed flag in place. A new torrent is created unless [maxTorrents] is
      * reached, and a new peer is added unless [maxPeersPerTorrent] is reached.
@@ -120,11 +120,12 @@ class DhtStorage(
     }
 
     /**
-     * Fetch the announced peers for [infoHash] in the requester's address family —
-     * the data half of `dht_default_storage::get_peers`. [noseed] excludes seeds
-     * (for a seeding requester); [wantV4] picks `peers4` vs `peers6`. At most
-     * [maxReply] peers are returned (taken in stored order, not sampled — sampling
-     * is a transport concern). The optional torrent name is returned alongside.
+     * Fetch the announced peers for [infoHash] in the requester's address family.
+     * This is the data half of `dht_default_storage::get_peers`. [noseed] excludes
+     * seeds (for a seeding requester); [wantV4] picks `peers4` vs `peers6`. At most
+     * [maxReply] peers are returned, taken in stored order rather than sampled,
+     * because sampling is a transport concern. The optional torrent name is
+     * returned alongside.
      *
      * @param now current time; used only to opportunistically skip already-expired
      *   peers without mutating the store (call [tick] to actually purge).
@@ -156,7 +157,7 @@ class DhtStorage(
     // --- immutable items (BEP-44) ------------------------------------------------
 
     /**
-     * Store an immutable item — port of `put_immutable_item`. The key is
+     * Store an immutable item, the port of `put_immutable_item`. The key is
      * [DhtItem.target] (= SHA-1 of the bencoded value). Re-putting the same target
      * just refreshes its last-seen stamp. When the table is full a put of a *new*
      * target is dropped (libtorrent instead evicts the least-important item; that
@@ -177,7 +178,7 @@ class DhtStorage(
     }
 
     /**
-     * Fetch a stored immutable item by [target] — port of `get_immutable_item`.
+     * Fetch a stored immutable item by [target], the port of `get_immutable_item`.
      * Returns null if absent.
      */
     fun getImmutableItem(target: Sha1Hash): ImmutableItem? =
@@ -186,14 +187,14 @@ class DhtStorage(
     // --- mutable items (BEP-44) --------------------------------------------------
 
     /**
-     * Store or update a mutable item — port of `put_mutable_item`. The key is
+     * Store or update a mutable item, the port of `put_mutable_item`. The key is
      * [MutableItem.target] (= SHA-1(public key ‖ salt)). If a slot already exists,
      * the new item replaces it **only when its sequence number is strictly greater**
      * (`if (item.seq < seq)`), so older writes can never clobber newer ones; either
      * way the last-seen stamp is refreshed. A new slot is dropped when the table is
      * full (see [putImmutableItem] on eviction).
      *
-     * The item must already be signed/verified — [MutableItem.verify] is the
+     * The item must already be signed and verified. [MutableItem.verify] is the
      * caller's responsibility (the node layer rejects bad signatures before calling
      * this), mirroring libtorrent verifying in `incoming_request` before
      * `put_mutable_item`.
@@ -221,15 +222,15 @@ class DhtStorage(
     }
 
     /**
-     * Fetch a stored mutable item by [target] — port of `get_mutable_item`.
+     * Fetch a stored mutable item by [target], the port of `get_mutable_item`.
      * Returns null if absent.
      */
     fun getMutableItem(target: Sha1Hash): MutableItem? =
         mutableTable[target]?.item as? MutableItem
 
     /**
-     * The stored sequence number for [target], or null if absent — port of
-     * `get_mutable_item_seq`. The node layer uses this for the BEP-44 `cas` /
+     * The stored sequence number for [target], or null if absent. This is the port
+     * of `get_mutable_item_seq`. The node layer uses this for the BEP-44 `cas` /
      * old-sequence checks before a put.
      */
     fun getMutableItemSeq(target: Sha1Hash): Long? =
@@ -238,7 +239,7 @@ class DhtStorage(
     // --- maintenance -------------------------------------------------------------
 
     /**
-     * Age out expired peers and items — port of `dht_default_storage::tick`.
+     * Remove expired peers and items, the port of `dht_default_storage::tick`.
      * Peers older than [PEER_LIFETIME_SECONDS] are purged and torrents left with no
      * peers are removed; immutable/mutable items not heard about within
      * [itemLifetimeSeconds] are dropped.
@@ -278,7 +279,7 @@ class DhtStorage(
 
     companion object {
         /**
-         * How long an announced peer is kept — libtorrent purges peers older than
+         * How long an announced peer is kept. libtorrent removes peers older than
          * `announce_interval * 3 / 2` where `announce_interval` is 30 minutes, i.e.
          * 45 minutes = 2700 seconds.
          */

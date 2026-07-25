@@ -8,8 +8,8 @@ import io.github.yuroyami.kitetorrent.peer.PeerAddress
 import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
 
 /**
- * One IP endpoint — an address plus a TCP port — the pure-Kotlin stand-in for the
- * `tcp::endpoint` values libtorrent stores in `add_torrent_params::peers` and
+ * One IP endpoint (an address plus a TCP port). This is the pure-Kotlin stand-in for
+ * the `tcp::endpoint` values libtorrent stores in `add_torrent_params::peers` and
  * `banned_peers`. On the wire (and in resume data) an endpoint is the address bytes
  * in network order followed by a 16-bit big-endian port: 6 bytes for IPv4, 18 for
  * IPv6 (see `write_endpoint` / `read_v*_endpoint` in socket_io.hpp).
@@ -28,8 +28,8 @@ data class Endpoint(val address: PeerAddress, val port: Int) {
  * torrent to a session, and the in-memory shape that fast-resume data round-trips
  * through.
  *
- * This is the *full* config object — the counterpart of the C++ struct — and is the
- * type [ResumeData.write]/[ResumeData.read] serialise. (KiteTorrent already has a
+ * This is the *full* config object, the counterpart of the C++ struct. It is the type
+ * [ResumeData.write] and [ResumeData.read] serialise. (KiteTorrent already has a
  * smaller, load-focused `AddTorrentParams` in
  * [io.github.yuroyami.kitetorrent.torrent] produced by `LoadTorrent`; this resume
  * variant lives in its own package to keep both faithful to the names libtorrent
@@ -39,7 +39,7 @@ data class Endpoint(val address: PeerAddress, val port: Int) {
  *  - [ti] is the parsed metadata when known; [infoSection] holds the *raw* bencoded
  *    `info` dictionary bytes. `write_resume_data` embeds those bytes verbatim under
  *    the `info` key (`entry["info"].preformatted()`), and `read_resume_data` recovers
- *    them from a present `info` dict — so [infoSection] is what actually crosses the
+ *    them from a present `info` dict. [infoSection] is therefore what crosses the
  *    serialisation boundary, while [ti] is the convenient decoded view.
  *  - Session-runtime-only and extension fields from the C++ struct
  *    (`userdata`, `extensions`, the deprecated `url`/`resume_data`) are not modelled.
@@ -191,8 +191,8 @@ data class AddTorrentParams(
     fun hasFlag(flag: Long): Boolean = (flags and flag) != 0L
 
     // The data-class-generated equals would compare [infoSection] (a ByteArray) by
-    // reference. Override so every field — including the byte array (by content) and
-    // the Bitfields (which already have value equality) — compares structurally.
+    // reference. Override so every field compares structurally, including the byte
+    // array (by content) and the Bitfields (which already have value equality).
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is AddTorrentParams) return false

@@ -12,8 +12,8 @@ import io.github.yuroyami.kitetorrent.crypto.Hasher256
 import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
 
 /**
- * BEP-9 "Extension for Peers to Send Metadata Files" (`ut_metadata`) — the pure
- * message codec, ported from libtorrent's `ut_metadata.cpp`
+ * BEP-9 "Extension for Peers to Send Metadata Files" (`ut_metadata`). This is the
+ * pure message codec, ported from libtorrent's `ut_metadata.cpp`
  * (src/ut_metadata.cpp, `ut_metadata_peer_plugin::write_metadata_packet` and
  * `on_extended`).
  *
@@ -39,21 +39,21 @@ import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
  *
  * For a `data` message the raw bytes of that one piece are appended *after* the
  * bencode dict (this is why a plain bdecode of the buffer stops at the end of the
- * dict — the trailing bytes are the payload). libtorrent recovers them with
+ * dict, because the trailing bytes are the payload). libtorrent recovers them with
  * `body.subspan(msg.data_section().size())`, i.e. everything past the bencoded
  * dict; [parse] does the same using [BdecodeNode.dataSection].
  *
- * This class is the codec only — the request scheduling / rate limiting that the
- * C++ peer-plugin layers on top lives elsewhere. [MetadataTransfer] is the small
+ * This class is the codec only. The request scheduling and rate limiting that the
+ * C++ peer plugin adds lives elsewhere. [MetadataTransfer] is the small
  * reassembly + verification helper.
  */
 object UtMetadata {
 
-    /** Size of one metadata piece, 16 KiB — `16 * 1024` in libtorrent. */
+    /** Size of one metadata piece, 16 KiB, written as `16 * 1024` in libtorrent. */
     const val PIECE_SIZE: Int = 16 * 1024
 
     /**
-     * The `msg_type` field — port of the anonymous `enum class msg_t : uint8_t`
+     * The `msg_type` field, the port of the anonymous `enum class msg_t : uint8_t`
      * in `ut_metadata.cpp`. The integer values are part of the wire format.
      */
     enum class Type(val value: Int) {
@@ -64,8 +64,8 @@ object UtMetadata {
         DATA(1),
 
         /**
-         * `msg_type` 2: "I don't have / won't send that piece" — libtorrent calls
-         * this `dont_have`; BEP-9 names it `reject`.
+         * `msg_type` 2: "I do not have that piece, or will not send it". libtorrent
+         * calls this `dont_have`; BEP-9 names it `reject`.
          */
         REJECT(2);
 
@@ -136,8 +136,8 @@ object UtMetadata {
 
     /**
      * Encode a `data` message: the bencode dict
-     * `d4:datad...e` — actually `d8:msg_typei1e5:piecei<n>e10:total_sizei<s>ee` —
-     * followed by the raw [pieceData] bytes appended verbatim.
+     * `d8:msg_typei1e5:piecei<n>e10:total_sizei<s>ee`, followed by the raw
+     * [pieceData] bytes appended verbatim.
      *
      * Mirrors `write_metadata_packet(msg_t::piece, piece)`: it writes `msg_type`,
      * `piece` and `total_size`, then `append_const_send_buffer`s the piece bytes.
@@ -194,7 +194,7 @@ object UtMetadata {
      *
      * Faithful to `on_extended`: the buffer is bdecoded; it must be a dict; both
      * `msg_type` and `piece` must be present integer keys, otherwise the message is
-     * invalid (libtorrent disconnects — here we return `null`). For a `data`
+     * invalid. libtorrent disconnects; we return `null` instead. For a `data`
      * message, the appended raw bytes are everything past the end of the bencoded
      * dict (`payload[dataSection.size .. end]`), and `total_size` is read with a
      * default of 0.
@@ -217,7 +217,7 @@ object UtMetadata {
         val data: ByteArray = if (type == Type.DATA) {
             // The raw piece bytes follow the bencoded dict. dataSection() gives the
             // exact bytes the dict was parsed from (including framing), so its
-            // length is the offset of the appended payload — the same arithmetic as
+            // length is the offset of the appended payload. This is the same arithmetic as
             // libtorrent's body.subspan(msg.data_section().size()).
             val dictLen = root.dataSection().size
             if (dictLen < payload.size) payload.copyOfRange(dictLen, payload.size) else ByteArray(0)
@@ -241,7 +241,7 @@ object UtMetadata {
 
 /**
  * Reassembles the metadata (`info`) blob from incoming [UtMetadata] `data` pieces
- * and verifies it against the expected info-hash — the codec-side counterpart of
+ * and verifies it against the expected info-hash. This is the codec-side counterpart of
  * `ut_metadata_plugin::received_metadata` / `metadata_request` in
  * `ut_metadata.cpp`.
  *
@@ -278,7 +278,7 @@ class MetadataTransfer(val totalSize: Int) {
     /** True if piece [piece] has already been stored. */
     fun hasPiece(piece: Int): Boolean = piece in 0 until pieceCount && have[piece]
 
-    /** The list of piece indices still missing — useful to drive [UtMetadata.encodeRequest]. */
+    /** The list of piece indices still missing. Use it to drive [UtMetadata.encodeRequest]. */
     fun missingPieces(): List<Int> {
         val out = ArrayList<Int>()
         for (i in 0 until pieceCount) if (!have[i]) out.add(i)
@@ -329,8 +329,8 @@ class MetadataTransfer(val totalSize: Int) {
     fun assembled(): ByteArray = buffer.copyOf()
 
     /**
-     * Verify the assembled metadata against an expected **v1** (SHA-1) info-hash —
-     * `hasher(info).final() == info_hashes().v1`. Returns `false` if not yet
+     * Verify the assembled metadata against an expected **v1** (SHA-1) info-hash, that
+     * is `hasher(info).final() == info_hashes().v1`. Returns `false` if not yet
      * [isComplete].
      */
     fun verifySha1(expected: Sha1Hash): Boolean {
@@ -339,8 +339,8 @@ class MetadataTransfer(val totalSize: Int) {
     }
 
     /**
-     * Verify the assembled metadata against an expected **v2** (SHA-256) info-hash —
-     * `hasher256(info).final() == info_hashes().v2`. Returns `false` if not yet
+     * Verify the assembled metadata against an expected **v2** (SHA-256) info-hash, that
+     * is `hasher256(info).final() == info_hashes().v2`. Returns `false` if not yet
      * [isComplete].
      */
     fun verifySha256(expected: Sha256Hash): Boolean {

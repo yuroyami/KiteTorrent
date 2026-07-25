@@ -7,19 +7,19 @@ import io.github.yuroyami.kitetorrent.peer.PeerAddress
 import kotlin.random.Random
 
 /**
- * A DHT node id — the pure-Kotlin port of libtorrent's `node_id`
+ * A DHT node id. The pure-Kotlin port of libtorrent's `node_id`
  * (`include/libtorrent/kademlia/node_id.hpp`), which is simply
- * `using node_id = sha1_hash;` — a 160-bit value. We reuse [Digest32]
+ * `using node_id = sha1_hash;`, a 160-bit value. We reuse [Digest32]
  * ([Sha1Hash]) unchanged: its [Digest32.xor] is the Kademlia XOR metric and its
  * [Digest32.countLeadingZeroes] is what [distanceExp] is built on.
  *
  * This file ports the free functions in `src/kademlia/node_id.cpp`:
- *  - [distance] / [compareRef] / [distanceExp] / [minDistanceExp] — the XOR
- *    metric helpers,
- *  - [generateIdImpl] / [generateId] / [verifyId] — BEP 42 "secure" node ids
- *    derived from the node's external IP via CRC32C,
- *  - [generateRandomId] — a random 160-bit id,
- *  - [matchingPrefix] / [generatePrefixMask] — bit-prefix helpers used by the
+ *  - [distance] / [compareRef] / [distanceExp] / [minDistanceExp]: the XOR
+ *    metric helpers.
+ *  - [generateIdImpl] / [generateId] / [verifyId]: BEP 42 "secure" node ids
+ *    derived from the node's external IP via CRC32C.
+ *  - [generateRandomId]: a random 160-bit id.
+ *  - [matchingPrefix] / [generatePrefixMask]: bit-prefix helpers used by the
  *    routing table's bucket refresh logic.
  *
  * Secret-id functions (`make_id_secret`/`generate_secret_id`/`verify_secret_id`)
@@ -46,9 +46,9 @@ fun compareRef(n1: Sha1Hash, n2: Sha1Hash, ref: Sha1Hash): Boolean =
     (n1 xor ref) < (n2 xor ref)
 
 /**
- * Returns `n` such that `2^n <= distance(n1, n2) < 2^(n+1)` — useful for finding
- * which bucket a node belongs to. The value is the number of trailing bits after
- * the shared bit prefix of `n1` and `n2`; if the very first bits differ it is
+ * Returns `n` such that `2^n <= distance(n1, n2) < 2^(n+1)`. It is useful for
+ * finding which bucket a node belongs to. The value is the number of trailing bits
+ * after the shared bit prefix of `n1` and `n2`; if the very first bits differ it is
  * 159 (see the note below).
  *
  * Faithful port of `int distance_exp(...)`:
@@ -57,7 +57,7 @@ fun compareRef(n1: Sha1Hash, n2: Sha1Hash, ref: Sha1Hash): Boolean =
  * ```
  * libtorrent's own comment flags that returning `159 - clz` (rather than
  * `160 - clz`) is "a little bit weird", but all of the routing-table code is
- * tuned to this convention, so we reproduce it exactly — the off-by-one is part
+ * tuned to this convention, so we reproduce it exactly. The off-by-one is part
  * of the contract every caller (notably [RoutingTable]) relies on.
  */
 fun distanceExp(n1: Sha1Hash, n2: Sha1Hash): Int {
@@ -97,7 +97,7 @@ private val V6_MASK = intArrayOf(0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff)
  *  1. Take the first 4 (IPv4) or 8 (IPv6) octets of the address and AND each
  *     with the corresponding [V4_MASK]/[V6_MASK] byte.
  *  2. OR `(r & 0x7) << 5` into octet 0.
- *  3. CRC32C those masked octets (in network-byte order — see below).
+ *  3. CRC32C those masked octets (in network-byte order, see below).
  *  4. `id[0] = crc >> 24`, `id[1] = crc >> 16`,
  *     `id[2] = ((crc >> 8) & 0xf8) | rand(0..7)` (top 5 bits fixed, low 3 random).
  *  5. `id[3..18]` = random bytes; `id[19] = r & 0xff`.

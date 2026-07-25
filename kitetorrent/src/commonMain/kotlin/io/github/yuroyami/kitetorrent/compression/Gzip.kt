@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.compression
 
 /**
- * gzip (RFC 1952) / zlib (RFC 1950) wrapper handling on top of [Inflate] — a
+ * gzip (RFC 1952) / zlib (RFC 1950) wrapper handling on top of [Inflate]: a
  * pure-Kotlin port of libtorrent's `inflate_gzip` + `gzip_header` (src/gzip.cpp).
  *
  * BitTorrent HTTP trackers and scrape endpoints frequently return their bencoded
@@ -15,7 +15,7 @@ package io.github.yuroyami.kitetorrent.compression
  * path is byte-for-byte faithful to `gzip_header`.
  *
  * Errors surface as [InflateException] carrying the faithful libtorrent error
- * code — e.g. [InflateError.INVALID_GZIP_HEADER] for a malformed header,
+ * code, e.g. [InflateError.INVALID_GZIP_HEADER] for a malformed header,
  * [InflateError.INFLATED_DATA_TOO_LARGE] when a size cap is exceeded.
  */
 object Gzip {
@@ -52,7 +52,7 @@ object Gzip {
 
         // Inflate the raw DEFLATE payload that follows the wrapper. (gzip's 8-byte
         // CRC32+ISIZE trailer and zlib's 4-byte Adler-32 trailer are ignored, as
-        // in libtorrent — puff stops at the final DEFLATE block and never reads
+        // in libtorrent: puff stops at the final DEFLATE block and never reads
         // them.)
         val payload = input.copyOfRange(headerLen, input.size)
         val out = Inflate.inflate(payload)
@@ -145,7 +145,7 @@ object Gzip {
      * (CINFO <= 7), the pair must satisfy `(CMF*256 + FLG) % 31 == 0`, and FDICT
      * (bit 5 of FLG) must be clear since we don't carry a preset dictionary.
      *
-     * Extension beyond libtorrent (which is gzip-only) — see the class KDoc.
+     * Extension beyond libtorrent (which is gzip-only). See the class KDoc.
      */
     private fun zlibHeader(input: ByteArray): Int {
         if (input.size < 2) return -1

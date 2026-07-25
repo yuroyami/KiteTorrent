@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent
 
 /**
- * Client fingerprint generation — the pure-Kotlin port of libtorrent's
+ * Client fingerprint generation. This is the pure-Kotlin port of libtorrent's
  * `generate_fingerprint` (fingerprint.hpp / src/fingerprint.cpp).
  *
  * A fingerprint is the 8-character prefix BitTorrent clients stamp on the front
@@ -29,8 +29,8 @@ package io.github.yuroyami.kitetorrent
 const val DEFAULT_CLIENT_TAG: String = "KT"
 
 /**
- * Encode a single version component as one fingerprint character — the port of
- * the anonymous `version_to_char(int v)` in src/fingerprint.cpp.
+ * Encode a single version component as one fingerprint character. This is the port
+ * of the anonymous `version_to_char(int v)` in src/fingerprint.cpp.
  *
  * libtorrent maps `0..9` to the digits `'0'..'9'` and any value `>= 10` to the
  * letters `'A','B','C',...` (i.e. 10 -> 'A', 35 -> 'Z'). This widens the per-slot
@@ -38,8 +38,8 @@ const val DEFAULT_CLIENT_TAG: String = "KT"
  * precondition violation upstream (`TORRENT_ASSERT_FAIL`); here they throw.
  *
  * Note libtorrent does not bound the upper end, so `v == 36` would roll past
- * `'Z'` into `'['` and beyond — we reproduce that behaviour faithfully rather
- * than clamping, but the version slots in practice are small.
+ * `'Z'` into `'['` and beyond. We reproduce that behaviour rather than clamping,
+ * but the version slots are small in practice.
  */
 fun versionToChar(v: Int): Char {
     require(v >= 0) { "fingerprint version component must be >= 0, was $v" }
@@ -54,9 +54,8 @@ fun versionToChar(v: Int): Char {
  * @param clientTag the two-character client identifier (e.g. `"KT"`, `"LT"`).
  *        libtorrent requires exactly two characters; if fewer than two are given
  *        it substitutes `"--"` (matching `if (name.size() < 2) name = "--"`).
- *        More than two characters is a precondition violation upstream — here we
- *        require exactly two (after the short-string fallback) to avoid silently
- *        truncating.
+ *        More than two characters is a precondition violation upstream. We require
+ *        exactly two (after the short-string fallback) to avoid silently truncating.
  * @param major    major version, encoded by [versionToChar] into slot 3.
  * @param minor    minor version, encoded into slot 4. Defaults to 0.
  * @param tiny     revision version (libtorrent's `revision`), slot 5. Defaults to 0.

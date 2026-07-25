@@ -22,8 +22,8 @@ import kotlin.test.assertTrue
 
 /**
  * Resume autosave trigger: the engine asks the app to persist fast-resume data exactly when
- * it goes stale — on pause, and on finishing (the transition to SEEDING). Completes the
- * fast-resume feature so an app never has to poll to know when to save.
+ * it goes stale: on pause, and on finishing (the transition to SEEDING). An app
+ * therefore never has to poll to know when to save.
  */
 class ResumeAutosaveTest {
 

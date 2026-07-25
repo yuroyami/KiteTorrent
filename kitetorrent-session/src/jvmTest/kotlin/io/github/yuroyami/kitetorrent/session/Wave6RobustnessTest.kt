@@ -38,12 +38,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 
 /**
- * Wave 6: the `request_blocks.cpp` scheduler — true end-game (busy-block
- * duplication + `cancel` on first delivery), snubbing (queue collapse + the
- * blocking-request cancel), sequential download, and the session connection
- * budget. The adversary is a [ScriptedSeeder]: a real TCP peer built on the
- * production [PeerConnection] codec that serves every block *except* the ones it
- * is told to withhold, and records every `cancel` it receives.
+ * The `request_blocks.cpp` scheduler: true end-game (busy-block duplication plus
+ * `cancel` on the first delivery), snubbing (queue collapse plus the blocking-request
+ * cancel), sequential download, and the session connection budget. The adversary is a
+ * [ScriptedSeeder]: a real TCP peer built on the production [PeerConnection] codec that
+ * serves every block *except* the ones it is told to withhold, and records every
+ * `cancel` it receives.
  */
 class Wave6RobustnessTest {
 
@@ -73,7 +73,7 @@ class Wave6RobustnessTest {
 
     /**
      * A scripted remote peer: accepts inbound connections, handshakes, advertises
-     * every piece, unchokes — then serves requests from [data] except the
+     * every piece and unchokes. It then serves requests from [data], except the
      * blocks in [withhold] (piece to begin), which it silently never sends.
      * Every received `cancel` is recorded in [cancels].
      */
@@ -124,7 +124,7 @@ class Wave6RobustnessTest {
                     }
                 }
             } catch (_: Throwable) {
-                // disconnect — fine
+                // disconnect: this is expected
             } finally {
                 conn.close()
             }
@@ -200,8 +200,8 @@ class Wave6RobustnessTest {
             session.connect(listOf(PeerEndpoint("127.0.0.1", staller.port)))
 
             // block 0 arrives, block 1 never does → after piece_timeout the peer is
-            // snubbed and — because the piece has no free blocks left — the blocking
-            // request is cancelled so another peer could pick it
+            // snubbed. The piece has no free blocks left, so the blocking request is
+            // cancelled and another peer can pick it up
             withTimeout(10_000) {
                 while (session.numSnubbedPeers() == 0) delay(25)
             }
@@ -279,7 +279,7 @@ class Wave6RobustnessTest {
 
             assertTrue(
                 elapsed >= 1.seconds,
-                "64 KiB at a 32 KiB/s cap cannot finish in $elapsed — the limiter isn't gating the receive path",
+                "64 KiB at a 32 KiB/s cap cannot finish in $elapsed, so the limiter is not gating the receive path",
             )
         } finally {
             workers.cancel()

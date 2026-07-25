@@ -24,8 +24,8 @@ import kotlinx.coroutines.withTimeout
  * µTP as the in-engine transport (BEP-29): two real [KiteTorrentEngine]s with
  * [µTP enabled] exchange a torrent end-to-end. The leecher's outgoing dial tries
  * uTP first (the seeder's `UtpSocketManager` passively accepts on the shared
- * listen port and routes the handshake by info-hash), so the whole transfer —
- * handshake, bitfield, requests, blocks, `have`s — rides over UDP. The stream
+ * listen port and routes the handshake by info-hash), so the whole transfer
+ * (handshake, bitfield, requests, blocks, `have`s) rides over UDP. The stream
  * counters on both managers prove TCP never carried the session.
  */
 class UtpEngineExchangeTest {
@@ -56,7 +56,7 @@ class UtpEngineExchangeTest {
 
     @Test
     fun twoEnginesExchangeATorrentOverUtp() = runBlocking {
-        // 2 pieces — sized for the simplified uTP window (fixed 64 KiB, no
+        // 2 pieces: sized for the simplified uTP window (fixed 64 KiB, no
         // retransmission timer yet), which is fine on loss-free loopback
         val data = ByteArray(64 * 1024) { ((it * 37 + 17) and 0xff).toByte() }
         val torrent = buildTorrent("utp-payload.bin", data)

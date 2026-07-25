@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.settings
 
 /**
- * The bit layout that distinguishes the three categories of session settings —
+ * The bit layout that distinguishes the three categories of session settings:
  * port of the `settings_pack::type_bases` enum in `settings_pack.hpp`.
  *
  * Setting names (indices) are 16-bit. The two most-significant bits encode the
@@ -41,17 +41,17 @@ object SettingType {
 }
 
 /**
- * Enumerated values for the integer settings that select an algorithm or mode —
+ * Enumerated values for the integer settings that select an algorithm or mode:
  * port of the small `enum`s nested in `settings_pack` (`settings_pack.hpp`). These
  * are plain `Int` constants because the settings store keeps everything as `Int`;
  * the values match libtorrent's enumerators exactly (note the deliberate gaps, e.g.
  * [ChokingAlgorithm.RATE_BASED_CHOKER] is 2, not 1).
  */
 object SuggestMode {
-    /** `suggest_mode_t::no_piece_suggestions` — never send suggest messages. */
+    /** `suggest_mode_t::no_piece_suggestions`: never send suggest messages. */
     const val NO_PIECE_SUGGESTIONS = 0
 
-    /** `suggest_mode_t::suggest_read_cache` — suggest the most recent read-cache pieces. */
+    /** `suggest_mode_t::suggest_read_cache`: suggest the most recent read-cache pieces. */
     const val SUGGEST_READ_CACHE = 1
 }
 
@@ -116,7 +116,7 @@ object MixedModeAlgorithm {
 }
 
 /**
- * Port of `settings_pack::enc_policy` — the encryption policy for incoming /
+ * Port of `settings_pack::enc_policy`: the encryption policy for incoming /
  * outgoing connections ([Settings.OUT_ENC_POLICY] / [Settings.IN_ENC_POLICY]).
  */
 object EncPolicy {

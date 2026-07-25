@@ -24,7 +24,7 @@ class ByteArrayBuilder(initialCapacity: Int = 64) {
         written += length
     }
 
-    /** Append the low byte of each char in [s] — for pure-ASCII tokens (bencode digits, ':'). */
+    /** Append the low byte of each char in [s], for pure-ASCII tokens (bencode digits, ':'). */
     fun appendAscii(s: String) {
         val n = s.length
         if (n == 0) return

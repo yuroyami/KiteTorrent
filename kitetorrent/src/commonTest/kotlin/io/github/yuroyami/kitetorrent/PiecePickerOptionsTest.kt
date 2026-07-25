@@ -93,7 +93,7 @@ class PiecePickerOptionsTest {
     @Test
     fun prioritizePartialsDrainsTheStartedPieceFirst() {
         val p = pickerWithASeed()
-        // start piece 8 (request one block) — it's now a partial
+        // start piece 8 (request one block). It is now a partial
         assertTrue(p.markAsDownloading(PieceBlock(8, 0), "me"))
         // make piece 3 much rarer than 8 so plain rarest-first would pick 3...
         p.incRefcount(8, "B")

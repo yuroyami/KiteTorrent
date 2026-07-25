@@ -65,15 +65,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** The lifecycle state of a torrent — a small port of libtorrent's `torrent_status::state_t`. */
+/** The lifecycle state of a torrent. A small port of libtorrent's `torrent_status::state_t`. */
 enum class TorrentState { CHECKING, DOWNLOADING, SEEDING, PAUSED }
 
 /**
- * The download/upload engine for a single torrent — the live counterpart of libtorrent's
- * `torrent` (torrent.cpp). It wires the pure-core pieces on coroutines: announce → collect
- * peers → run a [PeerConnection] per peer → a [PiecePicker]-driven request pipeline →
- * write blocks to [DiskIo] → verify completed pieces → broadcast `have` → and serve blocks
- * back to peers we've unchoked.
+ * The download/upload engine for a single torrent. It is the live counterpart of
+ * libtorrent's `torrent` (torrent.cpp). It wires the pure-core pieces on coroutines:
+ * announce → collect peers → run a [PeerConnection] per peer → a [PiecePicker]-driven
+ * request pipeline → write blocks to [DiskIo] → verify completed pieces → broadcast
+ * `have` → and serve blocks back to peers we've unchoked.
  *
  * Tunables come from the ported [SettingsPack] (the libtorrent defaults), exactly the
  * knobs `torrent`/`peer_connection` read from `m_settings`:
@@ -84,32 +84,33 @@ enum class TorrentState { CHECKING, DOWNLOADING, SEEDING, PAUSED }
  * The request scheduler is a faithful port of `request_blocks.cpp` + the relevant
  * `peer_connection` machinery:
  *
- *  - **Dynamic request queue** (`update_desired_queue_size`) — each peer's pipeline
+ *  - **Dynamic request queue** (`update_desired_queue_size`): each peer's pipeline
  *    depth is `request_queue_time × download-rate / block-size`, clamped to
- *    `[2, max_out_request_queue]`, with slow-start growing it by one per block
- *    until the rate stops climbing. Snubbed or end-game peers drop to 1.
- *  - **True end-game** (`request_a_block`) — when the swarm has no free block left
- *    for a peer with an empty queue, *one* block already requested from someone
- *    else is double-requested (gated by `strict_end_game_mode`); whoever delivers
- *    first wins and every other holder gets a `cancel` (`torrent::cancel_block`).
- *  - **Snubbing** (`snub_peer`) — a peer with outstanding requests that sends no
- *    payload for `piece_timeout` is snubbed: queue depth 1, *reverse* picking (it
- *    converges on common pieces instead of holding rare ones hostage), and its
- *    newest request is cancelled when it blocks a piece's completion — after a
- *    replacement is requested, so the picker can't hand the same block back.
- *  - **Choking** — a periodic [Choker] round (`unchoke_interval`) limits uploads to
- *    the fastest peers + one rotating optimistic slot; choked peers are not served.
- *  - **Rate limiting** — payload moves through the engine's [RateLimiter] (the
- *    live [io.github.yuroyami.kitetorrent.bandwidth.BandwidthManager] wiring):
- *    uploads acquire quota before the send, downloads after the receive
- *    (back-pressure on the read loop).
- *  - **µTP** — with a [UtpSocketManager] attached, outgoing connections try uTP
+ *    `[2, max_out_request_queue]`. Slow start grows the depth by one per block until
+ *    the rate stops climbing. Snubbed or end-game peers drop to 1.
+ *  - **True end-game** (`request_a_block`): when the swarm has no free block left for
+ *    a peer with an empty queue, the engine re-requests *one* block already asked of
+ *    another peer (gated by `strict_end_game_mode`). The first copy to arrive is kept,
+ *    and every other holder gets a `cancel` (`torrent::cancel_block`).
+ *  - **Snubbing** (`snub_peer`): the engine snubs a peer that has outstanding requests
+ *    but sends no payload for `piece_timeout`. A snubbed peer gets queue depth 1 and
+ *    *reverse* picking, so it converges on common pieces instead of keeping rare pieces
+ *    unavailable. The engine also cancels its newest request when that request blocks a
+ *    piece from completing. A replacement is requested first, so the picker cannot hand
+ *    the same block back.
+ *  - **Choking**: a periodic [Choker] round (`unchoke_interval`) limits uploads to
+ *    the fastest peers + one rotating optimistic slot. Choked peers are not served.
+ *  - **Rate limiting**: payload moves through the engine's [RateLimiter], which is the
+ *    live [io.github.yuroyami.kitetorrent.bandwidth.BandwidthManager] wiring. Uploads
+ *    acquire quota before the send and downloads after the receive, which applies
+ *    back-pressure to the read loop.
+ *  - **µTP**: with a [UtpSocketManager] attached, outgoing connections try uTP
  *    first and fall back to TCP (`outgoing_utp` + `outgoing_tcp`).
  *  - **Verified resume**, **state machine**, **pause/resume**, **priorities** and
  *    **[sequentialDownload]** as before.
  *
- * All shared state (picker, [have], the peer set) is guarded by a single [Mutex]; sends
- * happen outside the lock. That mutex is the concurrency contract — honour it.
+ * A single [Mutex] guards all shared state (picker, [have], the peer set); sends happen
+ * outside the lock. Every read and write of that state must hold the mutex.
  */
 class TorrentSession(
     val torrent: TorrentInfo,
@@ -129,7 +130,8 @@ class TorrentSession(
     /**
      * Fast-resume state from a previous run ([saveResumeData] / `ResumeData.read`). When
      * present, [start] adopts the saved piece bitfield and partial-block progress instead
-     * of running a full [recheck] — the libtorrent fast-resume path (`torrent::on_resume_data`).
+     * of running a full [recheck]. This is the libtorrent fast-resume path
+     * (`torrent::on_resume_data`).
      */
     private val resumeData: AddTorrentParams? = null,
     /** Optional IP blocklist consulted before every outbound dial (`apply_ip_filter`). */
@@ -148,7 +150,7 @@ class TorrentSession(
     private val requestQueueTimeSecs = settings.getInt(IntSetting.REQUEST_QUEUE_TIME)
     private val initialPickerThreshold = settings.getInt(IntSetting.INITIAL_PICKER_THRESHOLD)
     private val strictEndgame = settings.getBool(BoolSetting.STRICT_END_GAME_MODE)
-    /** Upload (unchoke) slots for this torrent — `max_uploads`; settable live, default from settings. */
+    /** Upload (unchoke) slots for this torrent: `max_uploads`. Settable live, default from settings. */
     var uploadSlots: Int = settings.getInt(IntSetting.UNCHOKE_SLOTS_LIMIT)
     private val requestTimeoutTicks = secondsToTicks(settings.getInt(IntSetting.REQUEST_TIMEOUT))
     private val pieceTimeoutTicks = secondsToTicks(settings.getInt(IntSetting.PIECE_TIMEOUT))
@@ -172,7 +174,7 @@ class TorrentSession(
     private var uploadedBytes = 0L
     private var downloadedBytes = 0L
 
-    /** Endpoints we've already dialed (incl. from PEX/DHT/trackers) — dedups repeat gossip. */
+    /** Endpoints we've already dialed (incl. from PEX/DHT/trackers), used to skip repeat gossip. */
     private val attemptedEndpoints = HashSet<PeerEndpoint>()
 
     /**
@@ -186,7 +188,7 @@ class TorrentSession(
         }
     }
 
-    /** Monotonic seconds since session construction — the clock the announce scheduler uses. */
+    /** Monotonic seconds since session construction, the clock the announce scheduler uses. */
     private val monotonicStart = kotlin.time.TimeSource.Monotonic.markNow()
     private fun nowSecs(): Long = monotonicStart.elapsedNow().inWholeSeconds
 
@@ -209,8 +211,8 @@ class TorrentSession(
 
     /**
      * Super-seeding / initial-seeding (`torrent_flags::super_seeding`). When seeding, advertise
-     * only one (rarest) piece to each peer at a time and hand out the next only once the peer
-     * announces it got the previous — so the seed pushes the whole torrent into the swarm with
+     * only one (rarest) piece to each peer at a time. Hand out the next one only once the peer
+     * announces it got the previous. The seed then pushes the whole torrent into the swarm with
      * minimal redundant uploads while bootstrapping it.
      */
     @Volatile
@@ -219,7 +221,7 @@ class TorrentSession(
     /** Pieces currently handed out to some peer under super-seeding (not yet propagated). */
     private val superSeedAssigned = HashSet<Int>()
 
-    /** Per-piece set of peers that supplied a block to it — for hash-failure blame. */
+    /** Per-piece set of peers that supplied a block to it, used for hash-failure blame. */
     private val pieceContributors = HashMap<Int, MutableSet<PeerContext>>()
 
     /** Share-ratio cap in per-mille (2000 = 2.0×); 0 = unlimited. Pauses seeding once met. */
@@ -241,14 +243,17 @@ class TorrentSession(
     /** Invoked (off-lock) whenever [state] changes. */
     var onStateChanged: ((TorrentState) -> Unit)? = null
 
-    /** Engine-internal state hook (queue manager) — separate so the app's [onStateChanged] is never clobbered. */
+    /**
+     * Engine-internal state hook (queue manager). It is kept separate so the app's
+     * [onStateChanged] is never overwritten.
+     */
     internal var onStateChangedInternal: ((TorrentState) -> Unit)? = null
 
     /** Invoked (off-lock) whenever a piece is verified and completed. */
     var onPieceVerified: ((Int) -> Unit)? = null
 
     /**
-     * Invoked (off-lock) when the fast-resume state has gone stale and should be persisted —
+     * Invoked (off-lock) when the fast-resume state has gone stale and should be persisted:
      * the torrent finished or was paused. The app responds by calling [saveResumeData] and
      * writing the bytes (the port of libtorrent's `save_resume_data` / `NEED_SAVE_RESUME`).
      */
@@ -256,7 +261,7 @@ class TorrentSession(
 
     /**
      * Alert sink (off-lock). The owning [io.github.yuroyami.kitetorrent.session.engine.KiteTorrentEngine]
-     * (Tier E) sets this to funnel per-torrent events into the session alert queue. Defaults to
+     * sets this to forward per-torrent events into the session alert queue. Defaults to
      * null (no-op). Called at the event sites this engine touches: tracker reply/error, peer
      * connect/disconnect/ban, piece finished, torrent finished, hash failures.
      */
@@ -268,7 +273,7 @@ class TorrentSession(
      */
     var onDhtPort: ((host: String, port: Int) -> Unit)? = null
 
-    /** True when this torrent carries v2 metadata — advertised on the wire (BEP-52 upgrade bit). */
+    /** True when this torrent carries v2 metadata (advertised on the wire, BEP-52 upgrade bit). */
     private val hasV2: Boolean = torrent.infoHashV2 != null
 
     /**
@@ -291,7 +296,7 @@ class TorrentSession(
         m
     }
 
-    /** v2 hash picker — decides when to request piece-layer hashes and validates responses. */
+    /** v2 hash picker: decides when to request piece-layer hashes and validates responses. */
     private val hashPicker: HashPicker? = if (hasV2) HashPicker(torrent, merkleTrees) else null
 
     init {
@@ -314,7 +319,7 @@ class TorrentSession(
     /** Peers currently snubbed (no payload despite outstanding requests). */
     suspend fun numSnubbedPeers(): Int = lock.withLock { peers.values.count { it.snubbed } }
 
-    /** Peers we're currently uploading to (unchoked) — bounded by [uploadSlots] (`max_uploads`). */
+    /** Peers we're currently uploading to (unchoked), bounded by [uploadSlots] (`max_uploads`). */
     suspend fun numUnchoked(): Int = lock.withLock { peers.values.count { !it.amChoking } }
 
     /** True while any peer is in end-game mode (double-requesting the last blocks). */
@@ -325,8 +330,8 @@ class TorrentSession(
     /**
      * Adopt fast-resume state, or [recheck] when there's none, then start the maintenance
      * tick, announce, and connect to peers. With [resumeData] present the saved `have`
-     * bitfield is *trusted* (no rehash) — that's the whole point of fast resume; restarts
-     * skip the full-disk re-read [recheck] would otherwise do.
+     * bitfield is *trusted* (no rehash). That is what fast resume is for: restarts skip the
+     * full-disk re-read [recheck] would otherwise do.
      */
     suspend fun start() {
         if (resumeData != null) applyResumeData(resumeData) else recheck()
@@ -379,8 +384,8 @@ class TorrentSession(
     }
 
     /**
-     * Capture the current piece state as fast-resume [AddTorrentParams] — the port of
-     * `save_resume_data` / `write_resume_data`. The result round-trips through
+     * Capture the current piece state as fast-resume [AddTorrentParams]. This is the port
+     * of `save_resume_data` / `write_resume_data`. The result round-trips through
      * `ResumeData.write`/`read` (embedding the raw `info` dict so the torrent reloads
      * without its `.torrent` file) and feeds straight back into [applyResumeData] on the
      * next run. Verified `have` pieces become both `havePieces` and `verifiedPieces`
@@ -465,9 +470,10 @@ class TorrentSession(
 
     /**
      * Hash-verify piece [i] against the torrent's hashes: v1 (SHA-1 of the piece) when a v1
-     * hash exists (v1 / hybrid), otherwise v2 — recompute the piece's merkle root from its
-     * 16 KiB-block SHA-256 leaves and compare to the published piece hash (BEP-52). For a
-     * multi-piece file the leaves are padded to blocks-per-piece with the zero block hash.
+     * hash exists (v1 / hybrid), otherwise v2. The v2 path recomputes the piece's merkle root
+     * from its 16 KiB-block SHA-256 leaves and compares it to the published piece hash
+     * (BEP-52). For a multi-piece file the leaves are padded to blocks-per-piece with the
+     * zero block hash.
      */
     private suspend fun pieceHashMatches(i: Int): Boolean {
         val hashes = disk.hashPiece(i)
@@ -721,7 +727,7 @@ class TorrentSession(
                     onTick()
                 }
             } catch (_: Throwable) {
-                // scope cancelled — normal shutdown
+                // scope cancelled. This is a normal shutdown.
             }
         }
     }
@@ -741,7 +747,7 @@ class TorrentSession(
                 if (ctx.slowStart && !ctx.pc.theirChoking && ctx.prevTickPayload > 0 &&
                     ctx.prevTickPayload + SLOW_START_SLACK_BYTES >= payloadThisTick
                 ) {
-                    ctx.slowStart = false // the rate stopped climbing — slow start is over
+                    ctx.slowStart = false // the rate stopped climbing, so slow start is over
                 }
                 ctx.prevTickPayload = payloadThisTick
                 ctx.stat.secondTick(tickIntervalMs.toInt())
@@ -821,12 +827,12 @@ class TorrentSession(
         if (ctx.endgameMode || ctx.snubbed) 1 else ctx.desiredQueueSize
 
     /**
-     * Port of `peer_connection::snub_peer`. Flags the peer, drops its queue to one,
-     * and — only when its newest stalled request *blocks a piece from completing*
-     * (no free blocks remain in that piece) — requests a replacement first, then
-     * aborts the stalled block so other peers can pick it. Requesting before
-     * aborting stops the picker handing the same block straight back, the stall
-     * documented in upstream's block-request-time-outs note.
+     * Port of `peer_connection::snub_peer`. Flags the peer and drops its queue to one.
+     * Then, only when its newest stalled request *blocks a piece from completing* (no
+     * free blocks remain in that piece), it requests a replacement first and aborts the
+     * stalled block afterwards, so other peers can pick it. Requesting before aborting
+     * stops the picker handing the same block straight back, the stall documented in
+     * upstream's block-request-time-outs note.
      */
     private fun snubPeerLocked(
         ctx: PeerContext,
@@ -915,7 +921,7 @@ class TorrentSession(
                     runConnectedPeer(pc, close, reachable = peer, releaseBudget = true) { pc.performHandshake() }
                     return
                 }
-                runCatching { close() } // MSE rejected — drop this attempt
+                runCatching { close() } // MSE rejected, so drop this attempt
                 if (outEncPolicy == EncPolicy.PE_FORCED) return // plaintext not allowed
             }
 
@@ -1093,7 +1099,7 @@ class TorrentSession(
      * Mirrors `bt_peer_connection::on_hash_request` + `write_hashes` / `write_hash_reject`:
      * locate the file by its `pieces root`, extract the requested run plus uncle proof from
      * that file's [MerkleTree] via [MerkleTree.getHashes], and reply with `hashes`. When we
-     * cannot answer — not a v2 torrent, unknown root, or an incomplete tree — fall back to a
+     * cannot answer (not a v2 torrent, unknown root, or an incomplete tree), fall back to a
      * protocol-valid `hash_reject`. We only ever serve hashes actually present in our tree
      * (so they verify against the known root); we never fabricate hashes.
      */
@@ -1209,7 +1215,7 @@ class TorrentSession(
     private suspend fun serveBlock(ctx: PeerContext, request: PeerMessage.Request) {
         // --- inbound REQUEST validation (peer_connection::on_request) ---
         // out-of-range piece, negative/zero/oversized length, or a window that runs past the
-        // piece are protocol violations — refuse and (for the bad ones) disconnect.
+        // piece are protocol violations. Refuse them and (for the bad ones) disconnect.
         if (request.piece < 0 || request.piece >= numPieces ||
             request.begin < 0 || request.length <= 0 ||
             request.length > blockSize || request.length > MAX_REQUEST_LENGTH
@@ -1227,7 +1233,7 @@ class TorrentSession(
             return
         }
 
-        // per-peer cap on outstanding inbound requests — drop a flooding peer (request_queue_size).
+        // per-peer cap on outstanding inbound requests: drop a flooding peer (request_queue_size).
         val flood = lock.withLock {
             ctx.inboundRequests++
             ctx.inboundRequests > MAX_INBOUND_REQUESTS
@@ -1277,7 +1283,7 @@ class TorrentSession(
         if (block.blockIndex < 0 || block.blockIndex >= picker.blocksInPiece(msg.piece)) return
         if (msg.block.size != blockLength(block)) return
         val wasOutstanding = lock.withLock { block in ctx.inflight }
-        if (!wasOutstanding) return // unsolicited or already-cancelled block — drop it
+        if (!wasOutstanding) return // unsolicited or already-cancelled block, so drop it
 
         // download rate limit: delaying the (sequential) receive loop back-pressures the sender
         limiter?.acquireDownload(msg.block.size, torrentBandwidth)
@@ -1297,11 +1303,11 @@ class TorrentSession(
             fresh = !picker.havePiece(msg.piece) && !picker.isDownloaded(block)
             if (fresh) {
                 // claim the block as WRITING under the lock so a concurrent end-game
-                // delivery of the same block sees it taken (isDownloaded) and is dropped —
-                // first delivery wins, only one disk.write happens
+                // delivery of the same block sees it taken (isDownloaded) and is dropped.
+                // The first copy to arrive is kept, and only one disk.write happens.
                 picker.markAsWriting(block, ctx.pc)
                 // end-game dedup (torrent::cancel_block): everyone else holding this
-                // block in flight gets a cancel — first delivery wins
+                // block in flight gets a cancel, because the first copy to arrive is kept
                 for (other in peers.values) {
                     if (other === ctx) continue
                     if (other.inflight.remove(block) != null) cancels.add(other)
@@ -1311,14 +1317,14 @@ class TorrentSession(
         for (other in cancels) runCatching {
             other.pc.sendCancel(block.pieceIndex, block.blockIndex * blockSize, blockLength(block))
         }
-        if (!fresh) { // duplicate delivery (end-game race) — drop it
+        if (!fresh) { // duplicate delivery (end-game race), so drop it
             maybeRequest(ctx)
             return
         }
 
         // disk-write safety: only mark the block FINISHED *after* the write succeeds. On a
         // write failure re-queue it (abortDownload) so the picker hands it out again, and
-        // surface a storage error — never advance the piece on un-persisted data.
+        // surface a storage error. Never advance the piece on un-persisted data.
         try {
             disk.write(msg.piece, msg.begin, msg.block)
         } catch (e: Exception) {
@@ -1339,12 +1345,12 @@ class TorrentSession(
     }
 
     /**
-     * Fill a peer's request pipeline — the port of `request_a_block`
-     * (request_blocks.cpp). Picks free blocks up to the peer's [effectiveQueueSize];
-     * when the swarm can't supply them and this peer has nothing outstanding, one
-     * *busy* block (already requested from another peer) is double-requested —
-     * end-game mode. `strict_end_game_mode` keeps busy picks off the table while
-     * untouched pieces still exist.
+     * Fill a peer's request pipeline. This is the port of `request_a_block`
+     * (request_blocks.cpp). Picks free blocks up to the peer's [effectiveQueueSize].
+     * When the swarm can't supply them and this peer has nothing outstanding, the engine
+     * re-requests one *busy* block (already requested from another peer), which is
+     * end-game mode. `strict_end_game_mode` forbids busy picks while untouched pieces
+     * still exist.
      */
     private suspend fun maybeRequest(ctx: PeerContext) {
         val pc = ctx.pc
@@ -1414,7 +1420,7 @@ class TorrentSession(
         if (sequentialDownload) {
             options = options or PiecePicker.OPTION_SEQUENTIAL
         } else if (picker.numHave() < initialPickerThreshold) {
-            // too few pieces to know what's rare — pick at random, finish partials first
+            // too few pieces to know what's rare, so pick at random and finish partials first
             options = options or PiecePicker.OPTION_PRIORITIZE_PARTIALS
         } else {
             options = options or PiecePicker.OPTION_RAREST_FIRST
@@ -1446,7 +1452,7 @@ class TorrentSession(
                 alert(TorrentFinishedAlert(torrent.name))
             }
         } else {
-            // bad data — blame contributing peers, ban repeat offenders, re-download from others.
+            // bad data: blame contributing peers, ban repeat offenders, re-download from others.
             alert(HashFailedAlert(torrent.name, piece))
             val toBan = lock.withLock {
                 picker.weDontHave(piece)
@@ -1557,7 +1563,7 @@ class TorrentSession(
             state = s
             onStateChanged?.invoke(s)
             onStateChangedInternal?.invoke(s)
-            // finishing or pausing makes the on-disk resume data stale — ask to re-save
+            // finishing or pausing makes the on-disk resume data stale, so ask to re-save
             if (s == TorrentState.SEEDING || s == TorrentState.PAUSED) onNeedSaveResume?.invoke()
         }
     }
@@ -1571,9 +1577,9 @@ class TorrentSession(
     private class PeerContext(
         val pc: PeerConnection,
         val close: suspend () -> Unit,
-        /** This peer's reachable (connectable) endpoint, when known — the address we dialed
-         *  for outbound peers; null for inbound peers (their listen port is unknown). Only
-         *  reachable endpoints are gossiped onward via PEX. */
+        /** This peer's reachable (connectable) endpoint, when known: the address we dialed
+         *  for outbound peers, and null for inbound peers (their listen port is unknown).
+         *  PEX only gossips reachable endpoints onward. */
         val reachable: PeerEndpoint? = null,
     ) {
         /** Blocks requested from this peer → age in ticks (for request timeouts). */
@@ -1589,13 +1595,13 @@ class TorrentSession(
         var roundDownloaded: Long = 0L
         var roundUploaded: Long = 0L
 
-        /** Per-peer transfer statistics (`m_statistics`) — drives the dynamic queue. */
+        /** Per-peer transfer statistics (`m_statistics`), which drive the dynamic queue. */
         val stat = Stat()
 
-        /** `m_desired_queue_size` — starts at 4 like upstream, then adapts. */
+        /** `m_desired_queue_size`: starts at 4 like upstream, then adapts. */
         var desiredQueueSize: Int = 4
 
-        /** `m_slow_start` — grow the queue per block until the rate stops climbing. */
+        /** `m_slow_start`: grow the queue per block until the rate stops climbing. */
         var slowStart: Boolean = true
 
         /** Payload bytes seen in the previous tick window (slow-start exit check). */
@@ -1604,16 +1610,16 @@ class TorrentSession(
         /** Ticks since this peer last delivered a payload block (`m_last_piece`). */
         var ticksSinceLastPiece: Int = 0
 
-        /** `m_snubbed` — outstanding requests but no payload for piece_timeout. */
+        /** `m_snubbed`: outstanding requests but no payload for piece_timeout. */
         var snubbed: Boolean = false
 
-        /** `m_endgame_mode` — the swarm had no free block left for this peer. */
+        /** `m_endgame_mode`: the swarm had no free block left for this peer. */
         var endgameMode: Boolean = false
 
         /** Super-seeding: the single piece currently advertised to this peer (`m_superseed_piece`), or -1. */
         var superSeedPiece: Int = -1
 
-        /** Pieces this peer has granted us via `allowed_fast` (BEP-6) — requestable while choked. */
+        /** Pieces this peer has granted us via `allowed_fast` (BEP-6), requestable while choked. */
         val allowedFast = HashSet<Int>()
 
         /** Outstanding inbound `request`s this peer has pending against us (flood guard). */
@@ -1634,7 +1640,7 @@ class TorrentSession(
         const val METADATA_PIECE = 16 * 1024
         const val DEFAULT_PRIORITY = 4
 
-        /** `min_request_queue` — the dynamic queue never drops below this (except snub/end-game). */
+        /** `min_request_queue`: the dynamic queue never drops below this (except snub/end-game). */
         const val MIN_REQUEST_QUEUE = 2
 
         /** Slow start ends when a tick grows payload by less than this (upstream's 5000-byte slack). */
@@ -1646,7 +1652,7 @@ class TorrentSession(
         /** Keep-alives go out roughly every 75 s of ticks, like `write_keepalive`'s cadence. */
         const val KEEP_ALIVE_TICKS = 75
 
-        /** PEX gossip cadence — libtorrent's `ut_pex_plugin` ticks once a minute (60 s min). */
+        /** PEX gossip cadence: libtorrent's `ut_pex_plugin` ticks once a minute (60 s min). */
         const val PEX_INTERVAL_SECONDS = 60
 
         /** How long an outgoing µTP SYN may wait before falling back to TCP. */

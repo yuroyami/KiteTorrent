@@ -28,7 +28,7 @@ import io.github.yuroyami.kitetorrent.crypto.Hasher256
  * is at index `L-1`.
  *
  * This object carries only the *pure computation* half of libtorrent's merkle
- * code — index arithmetic, root computation, and node validation. Anything tied
+ * code: index arithmetic, root computation, and node validation. Anything tied
  * to on-disk storage layout lives elsewhere; see [MerkleTree] for the in-memory
  * tree container.
  */
@@ -112,7 +112,7 @@ object Merkle {
     }
 
     /**
-     * Given a number of `blocks`, the number of leaves the tree needs — rounded
+     * Given a number of `blocks`, the number of leaves the tree needs, rounded
      * up to the next power of two. From `merkle_num_leafs`.
      */
     fun numLeafs(blocks: Int): Int {
@@ -158,7 +158,7 @@ object Merkle {
     /**
      * The pad hash for a tree level that holds `pieces` real nodes, given the
      * full leaf level holds `blocks` nodes. Starts from `SHA-256(0)` (the all-zero
-     * leaf pad) and folds it up — `pad = SHA-256(pad || pad)` — once per level
+     * leaf pad) and folds it up (`pad = SHA-256(pad || pad)`) once per level
      * until the level width reaches `blocks`. From `merkle_pad`.
      */
     fun pad(blocks: Int, pieces: Int): Sha256Hash {
@@ -173,7 +173,7 @@ object Merkle {
     }
 
     /**
-     * Computes `SHA-256(left || right)` — one interior merkle node.
+     * Computes `SHA-256(left || right)`, one interior merkle node.
      */
     fun hashPair(left: Sha256Hash, right: Sha256Hash): Sha256Hash =
         Hasher256().update(left.toByteArray()).update(right.toByteArray()).final()
@@ -208,7 +208,7 @@ object Merkle {
      * pairs; if the current level has an odd count it forms one boundary node
      * from the last real hash and the running `pad`, after which everything to
      * the right is implied padding and never materialised. The running `pad` is
-     * itself folded — `pad = SHA-256(pad || pad)` — so it always represents the
+     * itself folded (`pad = SHA-256(pad || pad)`), so it always represents the
      * pad node for the level above.
      *
      * @param leaves the real leaf hashes for the bottom level (non-empty).
@@ -257,7 +257,7 @@ object Merkle {
      *
      * The leaf count is padded up to the next power of two with zero-hashes
      * (`SHA-256(0)` at the block layer, folded up the implied padding). This is
-     * exactly [merkleRoot] with the block-layer pad — provided under an explicit
+     * exactly [merkleRoot] with the block-layer pad, provided under an explicit
      * name so call sites read clearly. Mirrors `merkle_root(leaves)`.
      *
      * @param blockLeaves the file's per-16-KiB-block SHA-256 hashes, in order.

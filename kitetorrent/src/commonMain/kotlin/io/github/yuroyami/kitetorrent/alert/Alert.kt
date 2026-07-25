@@ -140,9 +140,9 @@ object AlertCategory {
  * [type] (its `alert_type` constant), a short literal [what], a human-readable
  * [message], and the [category] bitmask it belongs to.
  *
- * Unlike libtorrent's C++ alerts — which are non-copyable, short-lived objects
- * tied to a stack allocator — the KiteTorrent ports are plain immutable data
- * classes, so they may be freely copied and retained.
+ * libtorrent's C++ alerts are non-copyable, short-lived objects tied to a stack
+ * allocator. The KiteTorrent ports are plain immutable data classes instead, so you
+ * may copy and retain them freely.
  *
  * @see AlertCategory for the [category] bit values.
  */

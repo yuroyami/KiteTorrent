@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.stat
 
 /**
- * Tracks the throughput of a single byte stream — pure-Kotlin port of libtorrent's
+ * Tracks the throughput of a single byte stream: pure-Kotlin port of libtorrent's
  * `stat_channel` (stat.hpp, stat.cpp).
  *
  * Each channel keeps three numbers:

@@ -5,7 +5,7 @@ import io.github.yuroyami.kitetorrent.bencode.BdecodeNode
 import io.github.yuroyami.kitetorrent.bencode.Entry
 
 /**
- * The KRPC message model and codec for the BitTorrent DHT — a pure-Kotlin port of
+ * The KRPC message model and codec for the BitTorrent DHT: a pure-Kotlin port of
  * the message-building and -parsing code spread across libtorrent's
  * `src/kademlia/node.cpp` (`incoming_request`, the per-query response builders, and
  * the single-bucket-refresh / ping query builders), `find_data.cpp`,
@@ -14,14 +14,14 @@ import io.github.yuroyami.kitetorrent.bencode.Entry
  * Every DHT packet is a bencoded dictionary with three or four top-level keys
  * (BEP-5 "KRPC Protocol"):
  *
- *  - `t` — the transaction id, an opaque byte string (libtorrent uses 2 random
- *    bytes, see `rpc_manager::invoke`). Echoed verbatim in the matching response.
- *  - `y` — the message type: `"q"` query, `"r"` response, `"e"` error.
- *  - `v` — an optional client-version string (not modelled here; libtorrent adds it
+ *  - `t`: the transaction id, an opaque byte string (libtorrent uses 2 random
+ *    bytes, see `rpc_manager::invoke`). The responder echoes it verbatim.
+ *  - `y`: the message type, either `"q"` query, `"r"` response or `"e"` error.
+ *  - `v`: an optional client-version string (not modelled here; libtorrent adds it
  *    at the transport layer).
- *  - `q` + `a` — for a query: the query name and its argument dict.
- *  - `r` — for a response: the response dict.
- *  - `e` — for an error: the `[code, message]` list (`incoming_error`).
+ *  - `q` + `a`: for a query, the query name and its argument dict.
+ *  - `r`: for a response, the response dict.
+ *  - `e`: for an error, the `[code, message]` list (`incoming_error`).
  *
  * The argument/response dict for every query carries the sender's own node id under
  * `id` (`rpc_manager::add_our_id` / `node::incoming_request`'s `add_our_id(reply)`).
@@ -40,21 +40,21 @@ import io.github.yuroyami.kitetorrent.bencode.Entry
  */
 sealed class DhtMessage {
 
-    /** The transaction id (`t`) — opaque bytes, echoed between query and response. */
+    /** The transaction id (`t`): opaque bytes the response echoes back from the query. */
     abstract val transactionId: ByteArray
 
     /** The single character carried in `y`: 'q', 'r' or 'e'. */
     abstract val messageType: Char
 
     /**
-     * A KRPC **query** (`y == "q"`) — `{t, y:"q", q:<name>, a:{id, …}}`. The concrete
+     * A KRPC **query** (`y == "q"`): `{t, y:"q", q:<name>, a:{id, …}}`. The concrete
      * argument payload is one of the nested [Args] types.
      */
     class Query(
         override val transactionId: ByteArray,
         /** The query name carried in `q` ("ping", "find_node", …). */
         val query: String,
-        /** The sender's node id — `a["id"]`. */
+        /** The sender's node id: `a["id"]`. */
         val nodeId: Sha1Hash,
         /** The typed `a` payload. */
         val args: Args,
@@ -65,14 +65,14 @@ sealed class DhtMessage {
     }
 
     /**
-     * A KRPC **response** (`y == "r"`) — `{t, y:"r", r:{id, …}}`. The typed `r`
-     * payload is one of the [Reply] types; [raw] keeps the original response dict so
+     * A KRPC **response** (`y == "r"`): `{t, y:"r", r:{id, …}}`. The typed `r`
+     * payload is one of the [Reply] types. [raw] keeps the original response dict, so
      * fields this model does not break out (`p`, `ip`, scrape bloom filters, …)
      * remain accessible.
      */
     class Response(
         override val transactionId: ByteArray,
-        /** The responder's node id — `r["id"]`. */
+        /** The responder's node id: `r["id"]`. */
         val nodeId: Sha1Hash,
         /** The typed `r` payload. */
         val reply: Reply,
@@ -83,7 +83,7 @@ sealed class DhtMessage {
     }
 
     /**
-     * A KRPC **error** (`y == "e"`) — `{t, y:"e", e:[code, message]}`, built by
+     * A KRPC **error** (`y == "e"`): `{t, y:"e", e:[code, message]}`, built by
      * libtorrent's `incoming_error`.
      */
     class ErrorMessage(
@@ -103,14 +103,14 @@ sealed class DhtMessage {
      * `id`. Each subtype corresponds to one BEP-5/44/51 query.
      */
     sealed class Args {
-        /** `ping` — no arguments beyond `id`. */
+        /** `ping`: no arguments beyond `id`. */
         object Ping : Args()
 
-        /** `find_node {target}` — BEP-5. */
+        /** `find_node {target}`: BEP-5. */
         class FindNode(val target: Sha1Hash) : Args()
 
         /**
-         * `get_peers {info_hash}` — BEP-5. [noseed]/[scrape] are libtorrent's optional
+         * `get_peers {info_hash}`: BEP-5. [noseed]/[scrape] are libtorrent's optional
          * extension flags (`a["noseed"]`, `a["scrape"]`).
          */
         class GetPeers(
@@ -120,7 +120,7 @@ sealed class DhtMessage {
         ) : Args()
 
         /**
-         * `announce_peer {info_hash, port, token, implied_port?, seed?, n?}` — BEP-5.
+         * `announce_peer {info_hash, port, token, implied_port?, seed?, n?}`: BEP-5.
          * When [impliedPort] is set the responder uses the UDP source port instead of
          * [port] (`a["implied_port"] = 1`).
          */
@@ -133,11 +133,11 @@ sealed class DhtMessage {
             val name: String? = null,
         ) : Args()
 
-        /** `get {target, seq?}` — BEP-44. [seq] limits the reply to newer mutable items. */
+        /** `get {target, seq?}`: BEP-44. [seq] limits the reply to newer mutable items. */
         class Get(val target: Sha1Hash, val seq: Long? = null) : Args()
 
         /**
-         * `put {token, v, [k, sig, seq, salt, cas]}` — BEP-44. [item] is the value to
+         * `put {token, v, [k, sig, seq, salt, cas]}`: BEP-44. [item] is the value to
          * store; [DhtItem.bencodedValue] is what travels as `a["v"]`, and the mutable
          * extras (`k`/`sig`/`seq`/`salt`) come from a [MutableItem]. [cas] is the
          * optional compare-and-swap expected sequence number.
@@ -153,11 +153,11 @@ sealed class DhtMessage {
 
     /** The typed contents of a response's `r` dictionary, minus the always-present `id`. */
     sealed class Reply {
-        /** A bare response carrying only `id` — what `ping` (and `announce_peer`) reply with. */
+        /** A bare response carrying only `id`: what `ping` (and `announce_peer`) reply with. */
         object Pong : Reply()
 
         /**
-         * `find_node` / generic node reply — `r{nodes, nodes6}`. The compact node
+         * `find_node` / generic node reply: `r{nodes, nodes6}`. The compact node
          * lists are decoded into [nodes] (from `nodes`) and [nodes6] (from `nodes6`).
          */
         class Nodes(
@@ -166,8 +166,8 @@ sealed class DhtMessage {
         ) : Reply()
 
         /**
-         * `get_peers` reply — `r{token, values?, nodes?, nodes6?}`. [values] holds the
-         * peer endpoints from the `values` list; [token] is the opaque write token to
+         * `get_peers` reply: `r{token, values?, nodes?, nodes6?}`. [values] holds the
+         * peer endpoints from the `values` list. [token] is the opaque write token to
          * present on a subsequent `announce_peer`.
          */
         class Peers(
@@ -178,10 +178,10 @@ sealed class DhtMessage {
         ) : Reply()
 
         /**
-         * `get` reply — `r{token, nodes?, nodes6?, seq?, v?, k?, sig?}` (BEP-44). When
+         * `get` reply: `r{token, nodes?, nodes6?, seq?, v?, k?, sig?}` (BEP-44). When
          * the responder has the item it includes [item] (immutable or mutable,
-         * reconstructed and — for mutable — signature-verified); otherwise just the
-         * token and closer nodes.
+         * reconstructed here, and for a mutable item signature-verified). Otherwise
+         * the reply carries only the token and closer nodes.
          */
         class Item(
             val token: ByteArray?,
@@ -200,14 +200,14 @@ sealed class DhtMessage {
         // --- query builders ------------------------------------------------------
 
         /**
-         * Build a `ping` query — `{t, y:"q", q:"ping", a:{id}}`. Mirrors the
+         * Build a `ping` query: `{t, y:"q", q:"ping", a:{id}}`. Mirrors the
          * `e["q"]="ping"` branch of `node::send_single_refresh`.
          */
         fun buildPingQuery(transactionId: ByteArray, nodeId: Sha1Hash): Entry =
             queryEnvelope(transactionId, "ping", nodeId)
 
         /**
-         * Build a `find_node` query — `a{id, target}`. (libtorrent issues this via
+         * Build a `find_node` query: `a{id, target}`. (libtorrent issues this via
          * `refresh`/`bootstrap`; the argument layout matches `incoming_request`'s
          * `find_node` schema.)
          */
@@ -217,7 +217,7 @@ sealed class DhtMessage {
             }
 
         /**
-         * Build a `get_peers` query — `a{id, info_hash, noseed?}`. Port of
+         * Build a `get_peers` query: `a{id, info_hash, noseed?}`. Port of
          * `get_peers::invoke`: `a["info_hash"]=…; if (noseed) a["noseed"]=1`.
          */
         fun buildGetPeersQuery(
@@ -233,7 +233,7 @@ sealed class DhtMessage {
         }
 
         /**
-         * Build an `announce_peer` query — `a{id, info_hash, port, token,
+         * Build an `announce_peer` query: `a{id, info_hash, port, token,
          * implied_port?, seed?, n?}`. Port of the `e["q"]="announce_peer"` assembly
          * in `node::announce`'s callback.
          */
@@ -256,7 +256,7 @@ sealed class DhtMessage {
         }
 
         /**
-         * Build a `get` query — `a{id, target, seq?}`. Port of `get_item::invoke`
+         * Build a `get` query: `a{id, target, seq?}`. Port of `get_item::invoke`
          * (`a["target"]=target`); [seq] is the optional BEP-44 read filter.
          */
         fun buildGetQuery(
@@ -270,13 +270,13 @@ sealed class DhtMessage {
         }
 
         /**
-         * Build a `put` query — `a{id, token, v, [k, seq, sig, salt, cas]}`. Faithful
-         * to `put_data::invoke`: the value is spliced in as its exact bencoding (so
-         * the signature round-trips), and the mutable extras are added only for a
+         * Build a `put` query: `a{id, token, v, [k, seq, sig, salt, cas]}`. Faithful
+         * to `put_data::invoke`: it splices the value in as its exact bencoding, so
+         * the signature still verifies, and it adds the mutable extras only for a
          * [MutableItem].
          *
-         * The [DhtItem.bencodedValue] is inserted via [Entry.Preformatted] so the
-         * `v` bytes are byte-identical to what was signed — re-encoding could reorder
+         * It inserts [DhtItem.bencodedValue] via [Entry.Preformatted] so the `v`
+         * bytes are byte-identical to what was signed. Re-encoding could reorder
          * dict keys and break the signature.
          */
         fun buildPutQuery(
@@ -318,7 +318,7 @@ sealed class DhtMessage {
         // --- response builders ---------------------------------------------------
 
         /**
-         * Build a bare response carrying only `id` — `{t, y:"r", r:{id}}`. This is
+         * Build a bare response carrying only `id`: `{t, y:"r", r:{id}}`. This is
          * what `ping`/`announce_peer` reply with (`incoming_request` adds nothing
          * beyond `t` and `id`).
          */
@@ -326,7 +326,7 @@ sealed class DhtMessage {
             responseEnvelope(transactionId, nodeId)
 
         /**
-         * Build a `find_node`-style response — `r{id, nodes?, nodes6?}`. Mirrors
+         * Build a `find_node`-style response: `r{id, nodes?, nodes6?}`. Mirrors
          * `write_nodes_entries`, which writes the compact list under the protocol's
          * `nodes`/`nodes6` key.
          */
@@ -341,7 +341,7 @@ sealed class DhtMessage {
         }
 
         /**
-         * Build a `get_peers` response — `r{id, token, values?, nodes?, nodes6?}`.
+         * Build a `get_peers` response: `r{id, token, values?, nodes?, nodes6?}`.
          * Port of `lookup_peers` + `write_nodes_entries`: the `values` list holds one
          * compact endpoint string per peer.
          */
@@ -364,7 +364,7 @@ sealed class DhtMessage {
         }
 
         /**
-         * Build a `get` (BEP-44) response — `r{id, token, nodes?, nodes6?, [seq, v,
+         * Build a `get` (BEP-44) response: `r{id, token, nodes?, nodes6?, [seq, v,
          * k, sig]}`. Port of the `get` branch of `incoming_request` plus
          * `dht_storage::get_mutable_item`/`get_immutable_item`: an immutable item adds
          * only `v`; a mutable item adds `seq` always and `v`/`sig`/`k` when filled.
@@ -402,7 +402,7 @@ sealed class DhtMessage {
         }
 
         /**
-         * Build an error response — `{t, y:"e", e:[code, message]}`. Direct port of
+         * Build an error response: `{t, y:"e", e:[code, message]}`. Direct port of
          * `incoming_error(entry&, char const*, int)`.
          */
         fun buildError(
@@ -604,9 +604,10 @@ sealed class DhtMessage {
         }
 
         /**
-         * Reconstruct the BEP-44 item from a `get` response's `r` dict — port of
-         * `get_item_observer::reply`: read `k`/`sig`/`seq`/`v`, verify a mutable
-         * item's signature, fall back to an immutable item when no key is present.
+         * Reconstruct the BEP-44 item from a `get` response's `r` dict. This is the
+         * port of `get_item_observer::reply`: read `k`/`sig`/`seq`/`v`, verify a
+         * mutable item's signature, fall back to an immutable item when no key is
+         * present.
          * Returns null when `v` is absent or a mutable item fails verification.
          */
         private fun parseGetItem(r: BdecodeNode, vNode: BdecodeNode, seqNode: BdecodeNode): DhtItem? {
@@ -644,9 +645,9 @@ sealed class DhtMessage {
         /**
          * Read a `values` list into endpoints. Handles both the mainline single
          * concatenated-string form and the uTorrent/libtorrent one-string-per-peer
-         * form — port of `get_peers_observer::reply` / `aux::read_endpoint_list`:
-         * a 6-byte string is a v4 endpoint, an 18-byte string is v6, and a single
-         * longer string is split into 6-byte v4 records.
+         * form. This is the port of `get_peers_observer::reply` /
+         * `aux::read_endpoint_list`: a 6-byte string is a v4 endpoint, an 18-byte
+         * string is v6, and a single longer string splits into 6-byte v4 records.
          */
         private fun parseValues(values: BdecodeNode): List<DhtEndpoint> {
             val out = ArrayList<DhtEndpoint>()
@@ -681,8 +682,8 @@ sealed class DhtMessage {
 
         /**
          * Find [key] in dict [d] and return it as a [Sha1Hash] iff it is a 20-byte
-         * string, else null — the `string_length() == 20` guard libtorrent applies
-         * to every id/target/info_hash field.
+         * string, else null. This is the `string_length() == 20` guard libtorrent
+         * applies to every id/target/info_hash field.
          */
         private fun id20(d: BdecodeNode, key: String): Sha1Hash? {
             val s = d.dictFindString(key)

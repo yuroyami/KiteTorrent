@@ -1,12 +1,12 @@
 package io.github.yuroyami.kitetorrent.compression
 
 /**
- * Raw DEFLATE (RFC 1951) decompressor — a faithful pure-Kotlin port of Mark
+ * Raw DEFLATE (RFC 1951) decompressor. This is a faithful pure-Kotlin port of Mark
  * Adler's `puff()` as bundled in libtorrent (src/puff.cpp, "puff" v2.3). puff
  * is the canonical, deliberately-simple reference implementation of inflate; it
  * trades speed for being an unambiguous specification of the format. libtorrent
  * ships it (instead of pulling in zlib) precisely so it can decode gzip'd HTTP
- * tracker / scrape responses with no external dependency — which is exactly our
+ * tracker and scrape responses with no external dependency. That is also our
  * situation in commonMain.
  *
  * Differences from the C++, all behaviour-preserving:
@@ -16,8 +16,8 @@ package io.github.yuroyami.kitetorrent.compression
  *    then doubles the buffer and re-runs the whole thing from scratch. That
  *    resize dance is an allocation strategy, not part of DEFLATE, so we drop it
  *    and grow the output array on demand. The error code `1` therefore never
- *    occurs here, which is correct — the algorithm itself never fails for lack
- *    of output, only the bounded-buffer wrapper did.
+ *    occurs here, which is correct. The algorithm itself never fails for lack of
+ *    output; only the bounded-buffer wrapper did.
  *
  *  - puff signals "ran past the end of input" via `setjmp`/`longjmp` from deep
  *    inside `bits()`/`decode()`, which the top-level `puff()` catches and turns
@@ -76,7 +76,7 @@ object Inflate {
      * decompressed bytes.
      *
      * @throws InflateException with the faithful [InflateError] on malformed or
-     *   truncated input — the same failure taxonomy puff returns numerically.
+     *   truncated input. These are the same failure cases puff returns numerically.
      */
     fun inflate(input: ByteArray): ByteArray {
         val s = State(input)
@@ -176,7 +176,7 @@ object Inflate {
             ensure(len)
             var src = outcnt - dist
             var n = len
-            // simple forward byte copy — correct for overlapping runs, unlike memcpy
+            // simple forward byte copy: correct for overlapping runs, unlike memcpy
             while (n-- > 0) {
                 out[outcnt++] = out[src++]
             }
@@ -236,8 +236,8 @@ object Inflate {
      *
      * Codes are stored bit-reversed in the stream, so we accumulate `code` one
      * bit at a time (building it in reverse) and compare against the running
-     * `first` code for the current length — this lets canonical codes resolve
-     * with plain integer comparisons.
+     * `first` code for the current length. This lets canonical codes resolve with
+     * plain integer comparisons.
      */
     private fun decode(s: State, h: Huffman): Int {
         var bitbuf = s.bitbuf

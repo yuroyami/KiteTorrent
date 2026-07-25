@@ -27,8 +27,8 @@ import kotlin.test.assertTrue
  * The strongest end-to-end test: **two real [KiteTorrentEngine] instances** exchange a
  * torrent over loopback. The seeder serves blocks from its pre-filled disk (the upload
  * path: inbound accept → handshake → unchoke → serve requests), and the leecher
- * downloads and verifies them (the download path). No fakes on either side — this proves
- * two KiteTorrent peers interoperate.
+ * downloads and verifies them (the download path). Neither side uses a fake, so this
+ * proves two KiteTorrent peers interoperate.
  */
 class TwoEngineExchangeTest {
 
@@ -102,7 +102,7 @@ class TwoEngineExchangeTest {
         val torrent = buildTorrent("payload.bin", data)
         val workers = CoroutineScope(coroutineContext + SupervisorJob())
 
-        // both peers REQUIRE MSE/PE — no plaintext fallback can mask a broken handshake
+        // both peers REQUIRE MSE/PE, so no plaintext fallback can hide a broken handshake
         fun forced() = SettingsPack().apply {
             setInt(IntSetting.OUT_ENC_POLICY, EncPolicy.PE_FORCED)
             setInt(IntSetting.IN_ENC_POLICY, EncPolicy.PE_FORCED)

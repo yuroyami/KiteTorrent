@@ -2,7 +2,7 @@ package io.github.yuroyami.kitetorrent.peer
 
 /**
  * A set of rules that uniquely categorises every IP address as allowed or
- * blocked — the port of `libtorrent::ip_filter`
+ * blocked. The port of `libtorrent::ip_filter`
  * (`src/ip_filter.cpp`, `include/libtorrent/ip_filter.hpp`).
  *
  * A default-constructed filter contains a single implicit rule that allows every
@@ -38,7 +38,7 @@ class IpFilter {
      * (`0` = allowed, [BLOCKED] = disallowed). Port of `ip_filter::add_rule`.
      *
      * Both endpoints must parse (via [PeerAddress]) as literal addresses **of the
-     * same family** — `start.isV4 == last.isV4` — matching libtorrent's
+     * same family** (`start.isV4 == last.isV4`), matching libtorrent's
      * precondition `first.is_v4() == last.is_v4()`. Postcondition: `access(x)`
      * returns [flags] for every `x` in \[[startIp], [endIp]].
      *
@@ -64,7 +64,7 @@ class IpFilter {
     }
 
     /**
-     * Returns the access flags for the address literal [ip] — `0` when allowed,
+     * Returns the access flags for the address literal [ip]: `0` when allowed,
      * [BLOCKED] when blocked. Port of `ip_filter::access`. The correct family's
      * sub-filter is consulted based on whether [ip] parses as v4 or v6.
      *
@@ -77,14 +77,14 @@ class IpFilter {
     }
 
     /**
-     * The current IPv4 ranges, minimal and ascending — the first element of
+     * The current IPv4 ranges, minimal and ascending. This is the first element of
      * `ip_filter::export_filter`'s tuple. Each [IpRange] carries inclusive 4-byte
      * keys and its flags; the list always spans `0.0.0.0 … 255.255.255.255`.
      */
     fun exportFilterV4(): List<IpRange> = filter4.exportRanges()
 
     /**
-     * The current IPv6 ranges, minimal and ascending — the second element of
+     * The current IPv6 ranges, minimal and ascending. This is the second element of
      * `ip_filter::export_filter`'s tuple. Each [IpRange] carries inclusive 16-byte
      * keys; the list always spans `:: … ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff`.
      */

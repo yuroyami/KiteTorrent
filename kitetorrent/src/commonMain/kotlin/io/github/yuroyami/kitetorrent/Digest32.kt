@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent
 
 /**
- * Holds an N-bit digest (or any fixed-size bit sequence) — the pure-Kotlin port of
+ * Holds an N-bit digest (or any fixed-size bit sequence). This is the pure-Kotlin port of
  * libtorrent's `digest32<N>` (sha1_hash.hpp). In libtorrent this is used for
  * info-hashes, piece hashes, peer IDs, DHT node IDs, etc.
  *
@@ -27,7 +27,7 @@ class Digest32 private constructor(private val n: ByteArray) : Comparable<Digest
     /** The 2*size lowercase hex representation (40 chars for SHA-1, 64 for SHA-256). */
     fun toHex(): String = Hex.encode(n)
 
-    /** True if every byte is zero — the additive identity / "unset" sentinel. */
+    /** True if every byte is zero. This is the additive identity and the "unset" sentinel. */
     fun isAllZeros(): Boolean {
         for (b in n) if (b.toInt() != 0) return false
         return true
@@ -39,7 +39,7 @@ class Digest32 private constructor(private val n: ByteArray) : Comparable<Digest
     infix fun and(o: Digest32): Digest32 = combine(o) { a, b -> a and b }
     infix fun or(o: Digest32): Digest32 = combine(o) { a, b -> a or b }
 
-    /** Bit-wise NOT — every bit flipped. */
+    /** Bit-wise NOT: every bit flipped. */
     fun inv(): Digest32 {
         val r = ByteArray(n.size)
         for (i in n.indices) r[i] = n[i].toInt().inv().toByte()
@@ -153,8 +153,8 @@ class Digest32 private constructor(private val n: ByteArray) : Comparable<Digest
     }
 }
 
-/** A 160-bit digest — info-hash v1, piece hash, peer ID, DHT node ID. */
+/** A 160-bit digest: info-hash v1, piece hash, peer ID, DHT node ID. */
 typealias Sha1Hash = Digest32
 
-/** A 256-bit digest — info-hash v2 / BitTorrent v2 merkle nodes. */
+/** A 256-bit digest: info-hash v2 and BitTorrent v2 merkle nodes. */
 typealias Sha256Hash = Digest32

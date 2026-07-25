@@ -1,6 +1,6 @@
 # Downloading Torrents
 
-Add a `.torrent` to the engine, watch pieces land, and control the download. KiteTorrent runs the same `request_blocks` scheduler libtorrent does: dynamic per-peer request queues, a true end-game, snubbing, and tit-for-tat choking.
+Add a `.torrent` to the engine, watch pieces land, and control the download. The session runs a full block scheduler: dynamic per-peer request queues, end-game mode, snubbing, and tit-for-tat choking. Each of those terms is explained in [How the scheduler works](#how-the-scheduler-works).
 
 This page covers adding a torrent from a parsed `TorrentInfo`. For magnet links (where the metadata is fetched first), see [Magnet links](magnets.md).
 
@@ -36,7 +36,7 @@ The `httpTracker` argument is not optional in practice: it defaults to `null`, a
 `addTorrent` returns a `TorrentSession`: the live handle for one torrent. Pass `resume = null` for a fresh download, or an `AddTorrentParams` to resume an existing one (see [Resuming a download](#resuming-a-download) below).
 
 !!! note "Choosing a disk backend"
-    `FileDiskIo(storage, basePath, ...)` writes to real files under `basePath`. `InMemoryDiskIo(storage)` keeps everything in RAM and is meant for tests. Both implement the same `DiskIo` interface, so the session does not care which one it gets. They report existing on-disk data differently, which matters on restart — see [Resuming a download](#resuming-a-download) — and they are compared in [Disk backends](#disk-backends).
+    `FileDiskIo(storage, basePath, ...)` writes to real files under `basePath`. `InMemoryDiskIo(storage)` keeps everything in RAM and is meant for tests. Both implement the same `DiskIo` interface, so the session does not care which one it gets. They report existing on-disk data differently, which matters on restart. See [Resuming a download](#resuming-a-download), and [Disk backends](#disk-backends) for a comparison.
 
 ### Finding peers
 
@@ -84,7 +84,7 @@ A session that finishes its wanted pieces transitions to `SEEDING` on its own. S
 
 ### Overall progress
 
-`progress()` is `suspend fun progress(): Float`. It returns verified pieces divided by the torrent's total piece count — a raw piece count, not a byte count, and the denominator is every piece in the torrent whether you asked for it or not. Pieces set to `IGNORE` priority stay in that denominator, so a torrent with any excluded file never reaches `1.0`.
+`progress()` is `suspend fun progress(): Float`. It returns verified pieces divided by the torrent's total piece count. That is a raw piece count, not a byte count. The denominator is every piece in the torrent, whether you asked for it or not. Pieces set to `IGNORE` priority stay in that denominator, so a torrent with any excluded file never reaches `1.0`.
 
 ```kotlin
 println("${(session.progress() * 100).toInt()}% complete")
@@ -104,7 +104,7 @@ import kotlinx.coroutines.launch
 // onPieceVerified is a plain callback, so it cannot call the suspending progress().
 session.onPieceVerified = { piece -> println("piece $piece verified") }
 
-// progress() suspends — read it from a coroutine.
+// progress() suspends, so read it from a coroutine.
 scope.launch {
     while (!session.isSeeding()) {
         println("${(session.progress() * 100).toInt()}%")
@@ -164,10 +164,10 @@ session.setFilePriorities(intArrayOf(1, 0, 1))
 The priority integers correspond to `DownloadPriority`: `IGNORE` (0), `LOW`, `NORMAL`, `HIGH`. A file set to `IGNORE` is never requested, but its pieces are still counted by `progress()`.
 
 !!! warning "An ignored file keeps the torrent from ever reporting complete"
-    `progress()` is `picker.numHave() / numPieces` and `isSeeding()` is `numHavePieces == numPieces`. Neither subtracts filtered pieces. If any file is set to `IGNORE`, `progress()` stops short of `1.0` and the session never transitions to `TorrentState.SEEDING`, even though every piece you asked for has arrived. The picker itself tracks the correct notion — `PiecePicker.isFinished()`, which is `numPieces - numFiltered <= numHave` — but the session does not call it. To detect completion of a filtered download, track the count of verified pieces you expect and compare it yourself.
+    `progress()` is `picker.numHave() / numPieces` and `isSeeding()` is `numHavePieces == numPieces`. Neither subtracts filtered pieces. If any file is set to `IGNORE`, `progress()` stops short of `1.0` and the session never transitions to `TorrentState.SEEDING`, even though every piece you asked for has arrived. The picker itself tracks the correct value in `PiecePicker.isFinished()`, which is `numPieces - numFiltered <= numHave`, but the session does not call it. To detect completion of a filtered download, count the verified pieces you expect and compare that count yourself.
 
 !!! note
-    You can also fix file priorities up front, before the session exists, by passing `filePriorities` to the `FileDiskIo` constructor. That lets the disk layer skip allocating storage for files you never intend to fetch.
+    You can also fix file priorities in advance, before the session exists, by passing `filePriorities` to the `FileDiskIo` constructor. That lets the disk layer skip allocating storage for files you never intend to fetch.
 
 ### Piece priorities
 
@@ -181,7 +181,7 @@ By default the picker is **rarest-first**: it grabs the least-available pieces f
 session.sequentialDownload = true
 ```
 
-Pieces then arrive in index order instead of rarest-first. `onPieceVerified` will report them roughly ascending, so a consumer can start reading the front of the file while the tail is still in flight.
+Pieces then arrive in index order instead of rarest-first. `onPieceVerified` reports them in roughly ascending order, so a consumer can start reading the front of the file while the rest is still downloading.
 
 !!! tip
     Sequential download trades a little swarm efficiency for in-order availability. Leave it off for plain "download the whole thing as fast as possible" jobs; turn it on for progressive playback.
@@ -227,7 +227,7 @@ val session = engine.addTorrent(torrent, disk, resume = restored)
 
 ## How the scheduler works
 
-You do not call any of the machinery below directly: it runs inside the session. It is documented here because it is the heart of the download path, and a faithful port of libtorrent's `request_blocks.cpp`.
+You do not call any of the machinery below directly: it runs inside the session. It is documented here because it decides which peer is asked for which block, and that decision drives your download speed.
 
 ### Dynamic per-peer request queues
 
@@ -237,9 +237,9 @@ Each peer connection keeps a pipeline of outstanding block requests so the link 
 depth = request_queue_time × measured_rate / block_size
 ```
 
-clamped to `[2, max_out_request_queue]`. A new or slow peer starts shallow and **slow-starts**: the depth grows by one block at a time until the peer's measured download rate stops climbing. A fast peer ends up with a deep queue; a slow one stays shallow, so a single laggard cannot tie up blocks the swarm needs.
+clamped to `[2, max_out_request_queue]`. A new or slow peer starts shallow and **slow-starts**: the depth grows by one block at a time until the peer's measured download rate stops climbing. A fast peer gets a deep queue and a slow peer stays shallow, so one slow peer cannot hold blocks that the swarm needs.
 
-The rate that feeds this formula comes from the ported `Stat` accounting. `request_queue_time` and `max_out_request_queue` are read from [`SettingsPack`](engine-settings.md), with libtorrent's defaults.
+The rate that feeds this formula comes from the `Stat` accounting. `request_queue_time` and `max_out_request_queue` are read from [`SettingsPack`](engine-settings.md), with libtorrent's defaults.
 
 ### Tit-for-tat choking
 
@@ -249,24 +249,24 @@ Upload slots are a finite resource, so the session runs periodic **choke rounds*
 
 If a peer holds outstanding requests but sends no payload for `piece_timeout`, it is **snubbed**:
 
-- its request queue collapses to a single block, so it can no longer hoard a deep pipeline;
-- the picker flips to **reverse** order for that peer (most-common-first), so a stalled peer stops sitting on the rare pieces everyone else needs;
-- its newest blocking request is cancelled, but only **after** a replacement has been requested from someone else, so the picker cannot immediately hand the same block straight back to the snubbed peer.
+- its request queue collapses to a single block, so it can no longer hold a deep pipeline;
+- the picker flips to **reverse** order for that peer (most-common-first), so a stalled peer no longer blocks the rare pieces that other peers need;
+- its newest blocking request is cancelled, but only **after** a replacement has been requested from someone else, so the picker cannot immediately return the same block to the snubbed peer.
 
 This is exactly how the session recovers from a peer that connects, claims pieces, and then withholds them.
 
-### True end-game
+### End-game mode
 
-Near the finish line a download can stall on the last few blocks held by slow peers. When the swarm has no free block left for an otherwise-idle peer, the session enters **end-game**: one busy block is requested from a second peer as well.
+Near the end of a download, the last few blocks can stall on slow peers. When the swarm has no free block left for an otherwise-idle peer, the session enters **end-game mode**: it requests one already-requested block from a second peer as well.
 
 - The **first delivery wins**: the block is written once.
 - Every other peer still holding that request gets a `cancel`, so no bandwidth is wasted finishing a duplicate.
 
-`strict_end_game_mode` (from settings) gates how aggressively this kicks in while there are still untouched pieces. The whole mechanism is exercised by an integration test that runs against a scripted peer which deliberately withholds blocks.
+`strict_end_game_mode` (from settings) controls when this starts while untouched pieces remain. The whole mechanism is exercised by an integration test that runs against a scripted peer which deliberately withholds blocks.
 
 ### Request timeouts
 
-Independently of snubbing, a maintenance tick sweeps for blocks that have been outstanding past `request_timeout` on a slow peer and recycles them back into the picker, so a quietly-dead request can never permanently strand a block.
+Snubbing is not the only guard. A maintenance tick looks for blocks that have been outstanding past `request_timeout` on a slow peer. It returns those blocks to the picker, so a silently dead request can never strand a block forever.
 
 ## Disk backends
 
@@ -296,9 +296,9 @@ The session talks to storage only through the `DiskIo` interface, so you choose 
     val disk = InMemoryDiskIo(torrent.storage)
     ```
 
-    It allocates a `ByteArray` of the torrent's full size up front, so keep it to small fixtures.
+    It allocates a `ByteArray` of the torrent's full size in advance, so keep it to small fixtures.
 
-`StorageMode.SPARSE` (the default) lets the filesystem allocate space lazily; `ALLOCATE` reserves the full size up front. `FileDiskIo` does its random access through a tiny `expect`/`actual` (a `RandomAccessFile` on JVM and Android, POSIX on iOS), which is why this backend lives in `:kitetorrent-session` rather than the pure core.
+`StorageMode.SPARSE` (the default) lets the filesystem allocate space lazily. `ALLOCATE` reserves the full size in advance. `FileDiskIo` does its random access through a tiny `expect`/`actual` (a `RandomAccessFile` on JVM and Android, POSIX on iOS), which is why this backend lives in `:kitetorrent-session` rather than the pure core.
 
 ## Shutting down
 

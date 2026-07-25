@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.dht
 import io.github.yuroyami.kitetorrent.bencode.BdecodeNode
 
 /**
- * A single required/optional key in a DHT message schema — port of
+ * A single required or optional key in a DHT message schema. This is the port of
  * `struct key_desc_t` (include/libtorrent/kademlia/msg.hpp). Together with
  * [verifyMessage] this reproduces libtorrent's `verify_message_impl`
  * (src/kademlia/msg.cpp): a table of these describes the keys a query/response must
@@ -57,8 +57,8 @@ class VerifyResult internal constructor(
 )
 
 /**
- * Verify a DHT message against a schema and extract its keys — faithful port of
- * `verify_message_impl` (src/kademlia/msg.cpp).
+ * Verify a DHT message against a schema and extract its keys. This is a faithful port
+ * of `verify_message_impl` (src/kademlia/msg.cpp).
  *
  * Walks [desc] in order against [message] (which must be a dict). For each
  * descriptor it does a `dict_find`, drops the result on a type mismatch (unless the
@@ -69,7 +69,7 @@ class VerifyResult internal constructor(
  * stack of up to 5 frames; we do the same).
  *
  * @return a [VerifyResult] whose [VerifyResult.values] line up index-for-index with
- *   [desc] — exactly the `ret[]` array libtorrent fills in.
+ *   [desc]. This is the `ret[]` array libtorrent fills in.
  */
 fun verifyMessage(message: BdecodeNode, desc: List<KeyDesc>): VerifyResult {
     val size = desc.size

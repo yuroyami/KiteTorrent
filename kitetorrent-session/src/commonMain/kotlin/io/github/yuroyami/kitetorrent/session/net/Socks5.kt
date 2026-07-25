@@ -160,8 +160,8 @@ internal suspend fun socks4Connect(
 
 /**
  * A live SOCKS5 UDP ASSOCIATE relay (RFC 1928 §6–§7). The control TCP connection ([control]) is
- * held open for the lifetime of the association — the proxy tears the UDP relay down when it
- * closes — while datagrams flow over [relay], a plain [UdpSocket].
+ * held open for the lifetime of the association (the proxy shuts the UDP relay down when that
+ * connection closes), while datagrams flow over [relay], a plain [UdpSocket].
  *
  * The engine routes uTP / DHT / UDP-tracker traffic through this object: it [wrap]s an outbound
  * payload with the SOCKS5 request header and sends it to [relayHost]:[relayPort], and [unwrap]s
@@ -204,7 +204,7 @@ class Socks5UdpAssociation internal constructor(
     /**
      * Parse a datagram received on [relay] off the relay, stripping the SOCKS5 reply header
      * (`RSV[2] FRAG ATYP ADDR PORT`). Returns the origin (host, port) and the inner payload, or
-     * `null` if the datagram is too short, fragmented (FRAG != 0), or otherwise malformed — the
+     * `null` if the datagram is too short, fragmented (FRAG != 0), or otherwise malformed: the
      * same packets libtorrent's `socks5_unwrap` returns `false` for and the caller drops.
      */
     fun unwrap(datagram: ByteArray): Socks5UdpDatagram? {
@@ -256,12 +256,12 @@ class Socks5UdpDatagram(val host: String, val port: Int, val payload: ByteArray)
  * Open a SOCKS5 UDP ASSOCIATE (RFC 1928 §7) relay through [config]: perform the auth handshake and
  * the `CMD=UDP ASSOCIATE` exchange on a freshly-dialled control connection, then learn the relay
  * `BND.ADDR:BND.PORT` from the reply. [relay] is the local UDP socket relayed datagrams travel on;
- * it is adopted by — and closed with — the returned [Socks5UdpAssociation]. The control connection
+ * the returned [Socks5UdpAssociation] adopts it and closes it. The control connection
  * is kept alive (the proxy drops the relay if it closes), so the caller must keep the association
  * object reachable and [Socks5UdpAssociation.close] it on shutdown.
  *
  * Per RFC 1928, the DST.ADDR/DST.PORT in the request is the local UDP endpoint the client will send
- * from; `0.0.0.0:0` ("don't restrict") is sent here — libtorrent does the same unless it has a
+ * from; `0.0.0.0:0` ("don't restrict") is sent here. libtorrent does the same unless it has a
  * concrete local endpoint to advertise. If the returned `BND.ADDR` is the wildcard `0.0.0.0`, the
  * proxy means "reuse my address", so [config].host is substituted (a standard client behaviour).
  *
@@ -337,7 +337,7 @@ private fun ipv6ToString(b: ByteArray, off: Int): String {
     return sb.toString()
 }
 
-/** Standard Base64 of [data] (for HTTP Basic auth) — no stdlib dependency, every KMP target. */
+/** Standard Base64 of [data] (for HTTP Basic auth): no stdlib dependency, every KMP target. */
 private fun base64(data: ByteArray): String {
     val tab = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     val out = StringBuilder((data.size + 2) / 3 * 4)

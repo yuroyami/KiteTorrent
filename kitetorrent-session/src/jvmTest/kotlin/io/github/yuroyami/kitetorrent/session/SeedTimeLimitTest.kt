@@ -24,8 +24,8 @@ import kotlin.test.assertEquals
 
 /**
  * Seed-time limit wiring: a torrent that starts complete (SEEDING) and is given a 1-second
- * seed-time cap auto-pauses once the maintenance tick accrues that much seeding time —
- * proving [io.github.yuroyami.kitetorrent.session.engine.SeedingLimits] is consulted live.
+ * seed-time cap auto-pauses once the maintenance tick accrues that much seeding time.
+ * This proves [io.github.yuroyami.kitetorrent.session.engine.SeedingLimits] is consulted live.
  */
 class SeedTimeLimitTest {
 

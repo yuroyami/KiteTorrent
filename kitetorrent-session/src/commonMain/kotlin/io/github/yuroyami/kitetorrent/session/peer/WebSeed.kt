@@ -13,8 +13,8 @@ import io.ktor.client.statement.readRawBytes
  * **inclusive** `[firstByte, lastByte]` interval, ready to drop straight into a
  * `Range: bytes=$firstByte-$lastByte` header.
  *
- * This is the pure, network-free output of [WebSeed.rangesFor] — see that function
- * for how a BitTorrent `(piece, offset, length)` request becomes a list of these.
+ * This is the pure, network-free output of [WebSeed.rangesFor]. See that function for
+ * how a BitTorrent `(piece, offset, length)` request becomes a list of these.
  */
 data class HttpRange(
     /** Absolute URL of the file this range lives in. */
@@ -40,11 +40,11 @@ data class HttpRange(
  * and its base `web_connection_base` (src/web_connection_base.cpp). libtorrent runs a
  * web seed as a full pseudo-`peer_connection`: it fabricates a have-all bitfield,
  * lets the normal piece picker schedule blocks, then in `write_request` turns each
- * BitTorrent block request into one or more HTTP `GET … Range: bytes=a-b` requests —
- * one per file the block overlaps — and re-assembles the response bytes back into the
- * piece. This class keeps that *request-mapping + fetch* core and drops the
- * peer-connection machinery (choke/interest, the receive-buffer state machine,
- * redirect-following, pad-file zero-filling), which belong to the orchestrator above.
+ * BitTorrent block request into one or more HTTP `GET … Range: bytes=a-b` requests, one
+ * per file the block overlaps, and re-assembles the response bytes back into the piece.
+ * This class keeps that *request-mapping + fetch* core and drops the peer-connection
+ * machinery (choke/interest, the receive-buffer state machine, redirect-following,
+ * pad-file zero-filling), which belong to the orchestrator above.
  *
  * **URL construction** mirrors `web_peer_connection`'s constructor and `write_request`:
  *  - **Single-file torrent**: the file *is* the torrent. libtorrent uses the seed URL
@@ -61,7 +61,7 @@ data class HttpRange(
  * `piece * pieceLength + offset`, and the run of `length` bytes is sliced at file
  * boundaries, yielding one [HttpRange] per file touched. A block that straddles a
  * file boundary therefore produces multiple ranges, fetched and concatenated in
- * order — exactly as libtorrent issues multiple `GET`s and stitches the payloads.
+ * order. libtorrent does the same: it issues multiple `GET`s and joins the payloads.
  *
  * Threading. [fetchBlock]/[downloadPiece] suspend on the injected [client] only; they
  * hold no mutable state, so a single [WebSeed] may be shared across coroutines.
@@ -85,8 +85,8 @@ class WebSeed(
     val url: String = WebSeedMapper.normalizeBaseUrl(baseUrl, torrent)
 
     /**
-     * Map a BitTorrent block request to the list of HTTP byte ranges that satisfy it
-     * — the pure, network-free heart of [fetchBlock]. Delegates to [WebSeedMapper],
+     * Map a BitTorrent block request to the list of HTTP byte ranges that satisfy it.
+     * This is the pure, network-free core of [fetchBlock]. It delegates to [WebSeedMapper],
      * the testable port of the URL + `Range` computation in
      * `web_peer_connection::write_request` together with `file_storage::map_block`.
      *
@@ -108,7 +108,7 @@ class WebSeed(
         WebSeedMapper.rangesFor(torrent, url, piece, offset, length)
 
     /**
-     * Fetch one BitTorrent block — `length` bytes at `(piece, offset)` — from this web
+     * Fetch one BitTorrent block (`length` bytes at `(piece, offset)`) from this web
      * seed, issuing a ranged HTTP `GET` per file the block overlaps ([rangesFor]) and
      * concatenating the bodies in order. Mirrors how `web_peer_connection` re-assembles
      * `incoming_payload` fragments into a single block.
@@ -160,7 +160,7 @@ internal object WebSeedMapper {
      */
     fun normalizeBaseUrl(baseUrl: String, torrent: TorrentInfo): String {
         if (torrent.storage.isSingleFile) {
-            // single-file: a URL ending in '/' is missing the filename — append the
+            // single-file: a URL ending in '/' is missing the filename, so append the
             // escaped torrent name (web_peer_connection.cpp:117-120). The torrent name
             // itself is the single file's name.
             return if (baseUrl.endsWith("/")) baseUrl + UrlEscape.escapePath(torrent.name) else baseUrl
@@ -190,7 +190,7 @@ internal object WebSeedMapper {
         if (length == 0) return emptyList()
 
         // Absolute offset of the request within the torrent's concatenated byte
-        // stream — file_storage.cpp:499 (piece * piece_length + offset).
+        // stream. See file_storage.cpp:499 (piece * piece_length + offset).
         val absStart = piece.toLong() * torrent.pieceLength + offset
         require(absStart + length <= torrent.totalSize) {
             "request [$absStart,${absStart + length}) past torrent end ${torrent.totalSize}"
@@ -206,7 +206,7 @@ internal object WebSeedMapper {
         }
 
         // Multi-file: walk the file list, slicing the [absStart, absStart+length) span
-        // at file boundaries — the loop in file_storage::map_block (file_storage.cpp
+        // at file boundaries. This is the loop in file_storage::map_block (file_storage.cpp
         // :507-531). `files` are in canonical order with monotonically increasing
         // offsets, so a linear scan from the file containing absStart suffices.
         val out = ArrayList<HttpRange>()

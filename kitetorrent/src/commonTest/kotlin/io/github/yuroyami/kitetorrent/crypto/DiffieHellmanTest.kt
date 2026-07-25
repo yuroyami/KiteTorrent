@@ -7,7 +7,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * MSE/PE Diffie-Hellman ([DhKeyExchange]) — the core property is that both peers
+ * MSE/PE Diffie-Hellman ([DhKeyExchange]). The core property is that both peers
  * derive the same shared secret, mirroring libtorrent's `dh_key_exchange`.
  */
 class DhKeyExchangeTest {

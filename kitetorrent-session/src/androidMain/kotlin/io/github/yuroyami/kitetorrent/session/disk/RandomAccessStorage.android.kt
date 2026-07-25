@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.session.disk
 import java.io.File
 import java.io.RandomAccessFile
 
-/** Android random-access file — identical to the JVM actual (java.io is available on Android). */
+/** Android random-access file: identical to the JVM actual (java.io is available on Android). */
 actual class RandomAccessStorage actual constructor(path: String) {
     private val raf = RandomAccessFile(path, "rw")
 

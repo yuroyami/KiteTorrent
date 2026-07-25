@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.torrent.resume
 
 /**
- * The `torrent_flags_t` bit constants — pure-Kotlin port of libtorrent's
+ * The `torrent_flags_t` bit constants. This is a pure-Kotlin port of libtorrent's
  * `torrent_flags` namespace (include/libtorrent/torrent_flags.hpp).
  *
  * In libtorrent these are `bitfield_flag<std::uint64_t>` values (`0_bit`, `1_bit`,
@@ -93,7 +93,7 @@ object TorrentFlags {
     const val I2P_TORRENT: Long = 1L shl 24
 
     /**
-     * The flags an `add_torrent_params` is constructed with — the port of
+     * The flags an `add_torrent_params` is constructed with. This is the port of
      * `torrent_flags::default_flags` for `TORRENT_ABI_VERSION != 1`:
      * `update_subscribe | auto_managed | paused | apply_ip_filter | need_save_resume`.
      */

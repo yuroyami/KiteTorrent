@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 /**
  * Tests the parse/build logic of [PeerConnection] against an in-memory [FakeDuplex]:
  * the handshake exchange + validation, message framing in [PeerConnection.receiveLoop],
- * and the state transitions the wire protocol mandates. No sockets are involved — the
+ * and the state transitions the wire protocol mandates. No sockets are involved. The
  * fake serves preloaded bytes and records what was written.
  */
 class PeerConnectionTest {

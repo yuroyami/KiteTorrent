@@ -6,7 +6,7 @@ import io.github.yuroyami.kitetorrent.protocol.PeerMessage
 
 /**
  * Decides which BitTorrent v2 merkle-hash ranges to request from peers, and validates the
- * `hashes` responses into per-file [MerkleTree]s — a practical-level port of libtorrent's
+ * `hashes` responses into per-file [MerkleTree]s. This is a practical-level port of libtorrent's
  * `hash_picker` (`src/hash_picker.cpp`).
  *
  * ## What this is for
@@ -38,7 +38,7 @@ import io.github.yuroyami.kitetorrent.protocol.PeerMessage
  * to 512 pieces); larger files are still handled correctly, just in a single larger request.
  *
  * The picker needs each file's own [MerkleTree] (constructed with the file's known root). It
- * does not own them — the session does — so they are passed in keyed by file index.
+ * does not own them (the session does), so they are passed in keyed by file index.
  *
  * @param info the parsed torrent (provides the file→piece mapping and known file roots).
  * @param trees per-file merkle trees, keyed by file index. A file's tree must have been
@@ -59,7 +59,7 @@ class HashPicker(
     // --- queries -------------------------------------------------------------
 
     /**
-     * True if we still need v2 hashes to be able to verify [piece] — i.e. its owning file is
+     * True if we still need v2 hashes to verify [piece]. That happens when its owning file is
      * a real (non-pad) multi-piece file whose piece-layer node for this piece is not yet
      * present in its [MerkleTree]. Single-piece files need no request (the file root *is* the
      * piece hash), and files whose `piece layers` were already loaded from the `.torrent`
@@ -104,7 +104,7 @@ class HashPicker(
      *  - `piecesRoot`: the file's 32-byte v2 root (identifies the file on the wire),
      *  - `baseLayer`: number of tree layers between the block leaves and the piece layer
      *    (`log2(blocksPerPiece)`), i.e. the piece layer expressed as a `base`,
-     *  - `index`: offset within the piece layer (0 — whole layer),
+     *  - `index`: offset within the piece layer (0 means the whole layer),
      *  - `length`: count of piece-layer hashes requested,
      *  - `proofLayers`: uncle hashes needed to fold up to the root.
      */
@@ -119,11 +119,11 @@ class HashPicker(
         if (numPieces <= 1) return null
 
         val base = blocksPerPieceLog(tree)
-        // length: pad the real piece count up to a power of two — the count of nodes the
+        // length: pad the real piece count up to a power of two. That is the count of nodes the
         // peer should send at the piece layer (libtorrent uses merkle_num_leafs here).
         val length = Merkle.numLeafs(numPieces)
         // proof layers: number of tree levels from the piece layer up to (but excluding) the
-        // root — these uncle hashes anchor the run to the file root. For a request spanning
+        // root. These uncle hashes anchor the run to the file root. For a request spanning
         // the *entire* piece layer the subtree root already equals the file root, so no uncle
         // hashes are strictly required; we still advertise the full path so a peer that only
         // has a subset can answer. layers(pieceLayer) = numLayers(numLeafs(numPieces)).
@@ -150,7 +150,7 @@ class HashPicker(
      * outstanding-request slot is cleared.
      *
      * @return true if the hashes validated and were inserted; false (and no mutation) on any
-     *   mismatch — wrong file, malformed hash sizes, or a failed proof.
+     *   mismatch: a wrong file, malformed hash sizes, or a failed proof.
      */
     fun onHashes(msg: PeerMessage.Hashes): Boolean {
         val fidx = fileForRoot(msg.piecesRoot) ?: return false

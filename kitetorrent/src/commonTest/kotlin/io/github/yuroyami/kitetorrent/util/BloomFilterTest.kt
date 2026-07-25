@@ -10,7 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Tests for [BloomFilter] — the port of libtorrent's `bloom_filter<N>`
+ * Tests for [BloomFilter], the port of libtorrent's `bloom_filter<N>`
  * (bloom_filter.hpp / bloom_filter.cpp).
  *
  * Golden index values are computed by hand from `set_bits` / `has_bits`:
@@ -81,7 +81,7 @@ class BloomFilterTest {
     @Test
     fun collidingPrefixIsAFalsePositive() {
         // Only the first four bytes drive the hash, so two keys sharing them are
-        // indistinguishable to the filter — a deterministic false positive.
+        // indistinguishable to the filter, which gives a deterministic false positive.
         val bf = BloomFilter(BloomFilter.DHT_SIZE)
         bf.set(key(0x07, 0x08, 0x09, 0x0a))
         // different tail, identical prefix

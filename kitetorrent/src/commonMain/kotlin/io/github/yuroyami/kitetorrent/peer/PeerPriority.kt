@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.peer
 
 /**
- * Our externally-visible IP address — the slimmed port of libtorrent's
+ * Our externally-visible IP address: the slimmed port of libtorrent's
  * `external_ip` (`include/libtorrent/ip_voter.hpp`) for what the peer list
  * actually needs.
  *
@@ -20,7 +20,7 @@ class ExternalIp(
     private val externalV6: PeerAddress? = null,
 ) {
     /**
-     * Return our external address of the same family as [forRemote] — the
+     * Return our external address of the same family as [forRemote]: the
      * analogue of `external_ip::external_address(address const&)`. Returns
      * `null` if we don't have an address of that family, in which case the
      * caller skips priority ranking for that peer.
@@ -29,27 +29,27 @@ class ExternalIp(
         if (forRemote.isV6) externalV6 else externalV4
 
     companion object {
-        /** An [ExternalIp] with no known address — ranking degrades gracefully. */
+        /** An [ExternalIp] with no known address. Ranking degrades gracefully. */
         val UNKNOWN: ExternalIp = ExternalIp(null, null)
     }
 }
 
 /**
  * Compute the BEP 40 *peer priority* of the (ordered) pair of endpoints
- * `(addr1:port1)` and `(addr2:port2)` — the pure-Kotlin port of
+ * `(addr1:port1)` and `(addr2:port2)`. This is the pure-Kotlin port of
  * `std::uint32_t peer_priority(tcp::endpoint, tcp::endpoint)` from
  * `src/torrent_peer.cpp`. One endpoint should be our own and the other the
- * peer's; the function is symmetric, so which is which does not matter.
+ * peer's. The function is symmetric, so which is which does not matter.
  *
  * The algorithm (https://www.bittorrent.org/beps/bep_0040.html), reproduced
  * faithfully:
- *  1. **Same address** — CRC32C the two 16-bit ports in network byte order,
+ *  1. **Same address**: CRC32C the two 16-bit ports in network byte order,
  *     lower port first.
- *  2. **Different IPv4** — order the endpoints, then mask both addresses:
+ *  2. **Different IPv4**: order the endpoints, then mask both addresses with
  *     `0xffff5555` if they differ in the first two bytes, `0xffffff55` if they
  *     share `/16` but differ in the third byte, otherwise `0xffffffff`
  *     (i.e. same `/24` keeps all bytes). CRC32C the concatenation, lower first.
- *  3. **Different IPv6** — order the endpoints; never mask the first 6 bytes,
+ *  3. **Different IPv6**: order the endpoints; never mask the first 6 bytes,
  *     and from the first differing byte onward (but at index 5 at the earliest)
  *     mask each remaining byte with `0x55`. CRC32C the 32-byte concatenation.
  *

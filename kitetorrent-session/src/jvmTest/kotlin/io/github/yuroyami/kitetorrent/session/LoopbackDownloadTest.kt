@@ -30,11 +30,11 @@ import kotlin.test.assertTrue
 
 /**
  * The end-to-end proof: a [TorrentSession] downloads a real torrent from a fake
- * seeder over a loopback TCP socket. This exercises the whole Tier 2 stack together —
- * ktor sockets, the BitTorrent handshake, bitfield/unchoke, the rarest-first request
- * pipeline, piece receipt, hash verification, and completion — against the pure-core
- * codecs and piece picker. If the bytes on the downloader's disk match the seeder's,
- * the engine genuinely works.
+ * seeder over a loopback TCP socket. This exercises the whole live session stack
+ * together (ktor sockets, the BitTorrent handshake, bitfield/unchoke, the
+ * rarest-first request pipeline, piece receipt, hash verification, and completion)
+ * against the pure-core codecs and piece picker. If the bytes on the downloader's
+ * disk match the seeder's, the engine genuinely works.
  */
 class LoopbackDownloadTest {
 
@@ -87,7 +87,7 @@ class LoopbackDownloadTest {
                     }
                 }
             } catch (_: Exception) {
-                // connection closed once the download finishes — expected
+                // connection closed once the download finishes, which is expected
             }
         }
 
@@ -100,7 +100,7 @@ class LoopbackDownloadTest {
             scope = workers,
             peerId = peerIdBytes("KT-leecher"),
             listenPort = port,
-            // this fake seeder speaks plaintext only — exercise the plaintext dial path
+            // this fake seeder speaks plaintext only, so exercise the plaintext dial path
             settings = SettingsPack().apply { setInt(IntSetting.OUT_ENC_POLICY, EncPolicy.PE_DISABLED) },
         )
         session.connect(listOf(PeerEndpoint("127.0.0.1", port)))

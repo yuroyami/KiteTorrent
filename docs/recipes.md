@@ -33,7 +33,7 @@ val session = engine.addTorrent(torrent, disk, resume = null)
 // onPieceVerified is a plain callback, so it cannot call the suspending progress().
 session.onPieceVerified = { piece -> println("piece $piece verified") }
 
-// progress() suspends — read it from a coroutine.
+// progress() suspends, so read it from a coroutine.
 scope.launch {
     while (!session.isSeeding()) {
         println("${(session.progress() * 100).toInt()}%")
@@ -63,9 +63,9 @@ session?.onPieceVerified = { piece -> println("piece $piece") }
 ```
 
 !!! tip "Already know some peers?"
-    Pass them explicitly with the three-argument overload: `engine.addMagnet(magnet, peers, diskFactory)`, where `peers` is a `List<PeerEndpoint>`. The engine still augments them with DHT and tracker results.
+    Pass them explicitly with the three-argument overload: `engine.addMagnet(magnet, peers, diskFactory)`, where `peers` is a `List<PeerEndpoint>`. The engine fetches the metadata from those peers instead of discovering peers itself. Once the download starts, the session still announces to the torrent's trackers and asks the DHT for more peers.
 
-`addMagnet` returns `null` if the magnet has no usable info-hash.
+`addMagnet` returns `null` when the magnet carries no usable info-hash, when no peer is reachable, or when no peer supplies the metadata.
 
 ## Create a torrent, then seed it
 

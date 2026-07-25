@@ -14,13 +14,13 @@ import kotlin.test.assertTrue
  * [PeerAddress], [Crc32c]).
  *
  * Three families of checks:
- *  1. **Golden cryptographic vectors** — [Crc32c] against the canonical
+ *  1. **Golden cryptographic vectors**: [Crc32c] against the canonical
  *     CRC-32C test string, and [peerPriority] against every vector in
  *     libtorrent's own `test/test_peer_priority.cpp` (the two absolute BEP 40
  *     values plus the same-port / masked /24/16 cases). These are exact ground
  *     truth copied from upstream.
- *  2. **Address predicates** — [PeerAddress.isLocal] / link-local parsing.
- *  3. **Data-structure behaviour** — dedupe by endpoint, ban / seed handling,
+ *  2. **Address predicates**: [PeerAddress.isLocal] / link-local parsing.
+ *  3. **Data-structure behaviour**: dedupe by endpoint, ban / seed handling,
  *     and connect-candidate selection skipping banned, connected and (when
  *     finished) seed peers, with the documented ranking tie-breakers.
  *

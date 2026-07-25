@@ -33,8 +33,8 @@ import kotlin.test.assertEquals
 /**
  * IP-filter enforcement: a blocklisted peer is never dialed. A real seeder is listening on
  * loopback (it would happily complete a handshake), but 127.0.0.1 is blocked, so the
- * session must not connect to it — proving [IpFilter] is consulted on the dial path rather
- * than being a parsed-but-ignored blocklist.
+ * session must not connect to it. This proves [IpFilter] is consulted on the dial path,
+ * and not parsed and then ignored.
  */
 class IpFilterEnforcementTest {
 
@@ -74,7 +74,7 @@ class IpFilterEnforcementTest {
         val port = server.localPort
         val workers = CoroutineScope(coroutineContext + SupervisorJob())
 
-        // a real, willing seeder on loopback — accepts and handshakes if anyone connects
+        // a real seeder on loopback: it accepts and handshakes if anyone connects
         var accepted = false
         workers.launch {
             val conn = server.accept()

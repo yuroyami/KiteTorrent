@@ -4,7 +4,7 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
 import kotlin.math.ln
 
 /**
- * A fixed-size Bloom filter keyed by 20-byte hashes — pure-Kotlin port of
+ * A fixed-size Bloom filter keyed by 20-byte hashes. This is a pure-Kotlin port of
  * libtorrent's `bloom_filter<N>` (bloom_filter.hpp) plus the free functions
  * `set_bits` / `has_bits` / `count_zero_bits` (bloom_filter.cpp).
  *
@@ -89,7 +89,7 @@ class BloomFilter(val numBytes: Int) {
         return ln(c.toDouble() / m.toDouble()) / (2.0 * ln(1.0 - 1.0 / m.toDouble()))
     }
 
-    /** Number of zero bits — the population count of cleared bits across [bits]. */
+    /** Number of zero bits: the count of cleared bits across [bits]. */
     fun countZeroBits(): Int {
         var ret = 0
         for (i in 0 until numBytes) {
@@ -133,8 +133,8 @@ class BloomFilter(val numBytes: Int) {
         const val DHT_SIZE: Int = 256
 
         /**
-         * Number of *zero* bits in each 4-bit nibble value 0..15 — the lookup table
-         * from `count_zero_bits`. Index `n` holds `4 - popcount(n)`.
+         * Number of *zero* bits in each 4-bit nibble value 0..15. This is the lookup
+         * table from `count_zero_bits`. Index `n` holds `4 - popcount(n)`.
          */
         private val ZERO_BITS_IN_NIBBLE = intArrayOf(
             // 0000 0001 0010 0011 0100 0101 0110 0111

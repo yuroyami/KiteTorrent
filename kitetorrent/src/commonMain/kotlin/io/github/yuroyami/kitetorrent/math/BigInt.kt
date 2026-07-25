@@ -3,7 +3,7 @@ package io.github.yuroyami.kitetorrent.math
 /**
  * Minimal pure-Kotlin unsigned big integer, base 2^32 (limbs are [UInt] stored in
  * an [IntArray] little-endian: limb 0 is least significant). Non-negative values
- * only — that is all KiteTorrent's crypto stack needs (MSE Diffie-Hellman modular
+ * only. That is all KiteTorrent's crypto stack needs (MSE Diffie-Hellman modular
  * exponentiation over a fixed 768-bit prime, and the ed25519 field/scalar arithmetic).
  *
  * There is no `BigInteger` in the Kotlin common standard library, so libtorrent's

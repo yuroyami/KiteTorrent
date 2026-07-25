@@ -4,7 +4,7 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
 import io.github.yuroyami.kitetorrent.peer.PeerAddress
 
 /**
- * The Kademlia k-bucket routing table — the pure-Kotlin port of libtorrent's
+ * The Kademlia k-bucket routing table. This is the pure-Kotlin port of libtorrent's
  * `routing_table` (`include/libtorrent/kademlia/routing_table.hpp`,
  * `src/kademlia/routing_table.cpp`).
  *
@@ -16,15 +16,15 @@ import io.github.yuroyami.kitetorrent.peer.PeerAddress
  * `O(log n)` hops.
  *
  * **What this port covers (the faithful core):**
- *  - [addNode] / [addNodeImpl] — the full insert/replace state machine, including
- *    the "same IP, new ID" eviction, replacement-cache promotion, and the
- *    bucket-split decision ([canSplit]).
- *  - [nodeSeen] / [heardAbout] — the two public entry points (pinged vs. merely
- *    "heard about").
- *  - [findNode] — gather the `count` nodes closest to a target id by XOR distance.
- *  - [splitBucket] / [fillFromReplacements] / [nodeFailed] — bucket maintenance.
- *  - [classifyPrefix] / [allInSameBucket] / [mostlyVerifiedNodes] /
- *    [replaceNodeImpl] — the free functions the table is built on.
+ *  - [addNode] and [addNodeImpl]: the full insert and replace state machine,
+ *    including the "same IP, new ID" eviction, replacement-cache promotion, and
+ *    the bucket-split decision ([canSplit]).
+ *  - [nodeSeen] and [heardAbout]: the two public entry points, for a pinged node
+ *    and for a node we have only been told about.
+ *  - [findNode]: gather the `count` nodes closest to a target id by XOR distance.
+ *  - [splitBucket], [fillFromReplacements] and [nodeFailed]: bucket maintenance.
+ *  - [classifyPrefix], [allInSameBucket], [mostlyVerifiedNodes] and
+ *    [replaceNodeImpl]: the free functions the table is built on.
  *
  * **Deliberate omissions / simplifications** (each noted at its call site):
  *  - **Endpoints are `host: String` + `port: Int`** (no socket types in
@@ -32,7 +32,7 @@ import io.github.yuroyami.kitetorrent.peer.PeerAddress
  *    BEP 42 `verified` flag come from [NodeEntry.addr] ([PeerAddress]).
  *  - **`restrict_routing_ips`** is honoured via [compareIpCidr] and [IpSet], but
  *    a node whose host is not a parseable IP literal (so `addr == null`) is
- *    treated as having no IP identity — it never collides in [IpSet] and is never
+ *    treated as having no IP identity. It never collides in [IpSet] and is never
  *    rejected by the CIDR-closeness check. Real libtorrent always has a numeric
  *    address here.
  *  - **RTT-based refresh scheduling** (`next_refresh`) and the
@@ -72,7 +72,7 @@ class RoutingTable(
     }
 
     /**
-     * One `(live, replacements)` pair — port of `struct routing_table_node`. The
+     * One `(live, replacements)` pair, the port of `struct routing_table_node`. The
      * lists are mutable; nodes are mutated in place (matching libtorrent, which
      * stores `node_entry` by value in `aux::vector`).
      */
@@ -88,7 +88,7 @@ class RoutingTable(
     // table (m_router_nodes). Keyed by "host:port".
     private val routerNodes = HashSet<String>()
 
-    // all IPs currently in the table — used to allow only a single entry per IP
+    // all IPs currently in the table. It allows only a single entry per IP
     // (or a CIDR-bounded few) in the whole table. Port of `ip_set m_ips`.
     private val ips = IpSet()
 
@@ -103,7 +103,7 @@ class RoutingTable(
     fun ownId(): Sha1Hash = id
 
     /**
-     * `(nodes, replacements, confirmed)` — total live nodes, total replacement
+     * `(nodes, replacements, confirmed)`: total live nodes, total replacement
      * nodes, and the number of live nodes that are confirmed up. Port of
      * `std::tuple<int,int,int> routing_table::size()`.
      */
@@ -120,7 +120,7 @@ class RoutingTable(
     }
 
     /**
-     * `true` if the table has no live nodes at all — a KiteTorrent convenience
+     * `true` if the table has no live nodes at all. This is a KiteTorrent convenience
      * (libtorrent has no single `need_bootstrap()` function; the DHT node decides
      * to bootstrap based on `routing_table::size()` and the return value of
      * [nodeSeen]). A freshly-constructed table that has never seen a node is
@@ -314,8 +314,8 @@ class RoutingTable(
                         if (settings.restrictRoutingIps) return AddNodeStatus.FAILED_TO_ADD
                     }
                     else -> {
-                        // same IP:port, new id, and pinged. Likely malicious —
-                        // evict the existing entry.
+                        // same IP:port, new id, and pinged. This is likely malicious,
+                        // so evict the existing entry.
                         removeNode(existing, bucket)
                         fillFromReplacements(existingBucketIdx)
                         // schedule the rest of the bucket to be re-pinged soon by
@@ -764,7 +764,7 @@ fun compareIpCidr(lhs: PeerAddress, rhs: PeerAddress): Boolean {
 }
 
 /**
- * Would every node in [b] — plus the candidate [nodeId] — fall on the same side
+ * Would every node in [b], plus the candidate [nodeId], fall on the same side
  * of the split at bit [bucketIndex]? If so, splitting the bucket gains nothing.
  * Port of `bool all_in_same_bucket(span<node_entry const>, node_id const&, int)`.
  */
@@ -779,8 +779,8 @@ fun allInSameBucket(b: List<NodeEntry>, nodeId: Sha1Hash, bucketIndex: Int): Boo
 }
 
 /**
- * Classify which "sub-branch" of a bucket [nid] falls into — the few bits after
- * the bucket's shared prefix. Port of
+ * Classify which "sub-branch" of a bucket [nid] falls into, using the few bits
+ * after the bucket's shared prefix. Port of
  * `std::uint8_t classify_prefix(int bucket_idx, bool last_bucket, int bucket_size, node_id nid)`.
  *
  * The return value is in `0 until bucketSize`. [replaceNodeImpl] uses it to keep a

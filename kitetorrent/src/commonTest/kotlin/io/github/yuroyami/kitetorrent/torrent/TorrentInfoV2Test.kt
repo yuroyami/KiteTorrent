@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
  * [TorrentInfo.pieceHashV2] accessor, against a real v2 torrent built by [CreateTorrent].
  * For each piece we recompute the merkle root from the file's block hashes exactly as the
  * live download path will (pad to blocks-per-piece with the zero block hash) and assert it
- * equals the published piece hash — so the verification recipe matches the torrent's own
+ * equals the published piece hash, so the verification recipe matches the torrent's own
  * independently-computed piece layers.
  */
 class TorrentInfoV2Test {

@@ -4,20 +4,20 @@ import io.github.yuroyami.kitetorrent.Bitfield
 import kotlin.random.Random
 
 /**
- * Rarest-first piece selection — pure-Kotlin port of the **core** of libtorrent's
+ * Rarest-first piece selection: a pure-Kotlin port of the **core** of libtorrent's
  * `piece_picker` (src/piece_picker.cpp, include/libtorrent/piece_picker.hpp).
  *
- * The picker is the brain that decides *which block to request from which peer*.
- * It tracks, per piece:
- *  1. **availability** — how many connected peers have the piece ([incRefcount]/
+ * The picker decides *which block to request from which peer*. It tracks, per
+ * piece:
+ *  1. **availability**: how many connected peers have the piece ([incRefcount]/
  *     [decRefcount] driven by HAVE / BITFIELD / disconnect events), plus a seed
  *     counter so seeds don't each bump every piece individually;
- *  2. **priority** — a manually-set 0..7 level ([setPiecePriority]); 0 = filtered
+ *  2. **priority**: a manually-set 0..7 level ([setPiecePriority]); 0 = filtered
  *     (never downloaded);
- *  3. **block state** — for partially downloaded pieces, the
+ *  3. **block state**: for partially downloaded pieces, the
  *     [BlockState.NONE]/[BlockState.REQUESTED]/[BlockState.WRITING]/[BlockState.FINISHED]
  *     state of every block, and which peer each was requested from;
- *  4. **have** — whether the piece has passed its hash check.
+ *  4. **have**: whether the piece has passed its hash check.
  *
  * [pickPieces] returns blocks in *rarest-first* order: the controlling key is
  * `piece_pos::priority()` (ported verbatim in [effectivePriority]), where a
@@ -43,10 +43,10 @@ import kotlin.random.Random
  * files, hashing-job details, and the mutable `m_pieces`/`m_priority_boundaries`
  * swap-list with random in-bucket shuffling. Instead of that swap-list,
  * [pickPieces] computes the pick order by stably sorting the pickable pieces on
- * the same `priority()` key the swap-list encodes — same *ordering semantics*,
- * far less machinery. Equal-priority ties are broken by piece index (the swap
- * list randomizes them); pass a [Random] to [pickPieces] to restore randomized
- * tie-breaking.
+ * the same `priority()` key the swap-list encodes. The *ordering semantics* are
+ * the same, with far less machinery. Equal-priority ties are broken by piece
+ * index (the swap list randomizes them); pass a [Random] to [pickPieces] to
+ * restore randomized tie-breaking.
  */
 class PiecePicker(
     numPieces: Int,
@@ -282,7 +282,7 @@ class PiecePicker(
     // =========================================================================
 
     /**
-     * The effective priority / sort value of [piece] — verbatim port of
+     * The effective priority / sort value of [piece]: a verbatim port of
      * `piece_pos::priority(piece_picker const*)`.
      *
      * Returns **-1** when the piece must not appear in the pick list: it is
@@ -296,7 +296,7 @@ class PiecePicker(
      *  * `-3` for a piece already in the `downloading` bucket,
      *  * `-2` for an open (not-yet-downloading) piece.
      *
-     * A **lower** value is picked first — so low availability and high manual
+     * A **lower** value is picked first, so low availability and high manual
      * priority both pull the value down.
      */
     fun effectivePriority(piece: Int): Int {
@@ -419,7 +419,7 @@ class PiecePicker(
     /**
      * True if every block of [piece] is finished or writing (or we already have
      * it). Mirrors `is_piece_finished`. Note this is about *blocks received*, not
-     * the hash check — a piece can be "finished" before it has "passed".
+     * the hash check. A piece can be "finished" before it has "passed".
      */
     fun isPieceFinished(piece: Int): Boolean {
         requirePiece(piece)
@@ -474,8 +474,8 @@ class PiecePicker(
     }
 
     /**
-     * Mark [piece] as completely downloaded *and* flushed to disk — we now "have"
-     * it and the picker stops tracking its blocks. Mirrors `piece_flushed`.
+     * Mark [piece] as completely downloaded *and* flushed to disk. The picker now
+     * counts it as had and stops tracking its blocks. Mirrors `piece_flushed`.
      * Safe to call straight from open (e.g. loading resume data): the have count
      * is accounted as if it had been downloaded and hash-checked first.
      */
@@ -497,7 +497,7 @@ class PiecePicker(
     }
 
     /**
-     * Mark every piece as had — set up a seed's picker. Mirrors `we_have_all`.
+     * Mark every piece as had. This sets up a seed's picker. Mirrors `we_have_all`.
      */
     fun weHaveAll() {
         numHaveFiltered += numFiltered
@@ -811,36 +811,36 @@ class PiecePicker(
 
     /**
      * Pick up to [numBlocksWanted] interesting blocks for a peer whose available
-     * pieces are described by [peerBitfield] — port of `pick_pieces`, including its
-     * option modes and the end-game busy-block tail.
+     * pieces are described by [peerBitfield]. This is a port of `pick_pieces`,
+     * including its option modes and the end-game busy-block tail.
      *
      * "Interesting" means: the peer has the piece, we don't have it, and it isn't
      * filtered (priority 0). Free blocks ([BlockState.NONE]) are returned first;
      * only when those cannot satisfy the request does the end-game tail append **one
-     * busy block** (a block already requested from another peer) — callers detect it
+     * busy block** (a block already requested from another peer). Callers detect it
      * via `numPeers(block) > 0` and apply their own end-game gates, exactly like
      * `request_a_block` does upstream.
      *
      * Option modes (combinable, same bit values as `piece_picker`):
-     *  - [OPTION_RAREST_FIRST] — ascending [effectivePriority] (rarer + higher
+     *  - [OPTION_RAREST_FIRST]: ascending [effectivePriority] (rarer + higher
      *    manual priority first; partial pieces a notch ahead). The default.
-     *  - [OPTION_REVERSE] — walk the rarest-first order *backwards* (most common
+     *  - [OPTION_REVERSE]: walk the rarest-first order *backwards* (most common
      *    last-bucket pieces first). Used for snubbed peers, so they converge on the
-     *    same common pieces instead of holding rare ones hostage.
-     *  - [OPTION_SEQUENTIAL] — top-priority (7) pieces first, then ascending piece
+     *    same common pieces instead of keeping rare pieces unavailable.
+     *  - [OPTION_SEQUENTIAL]: top-priority (7) pieces first, then ascending piece
      *    index ([OPTION_REVERSE]: descending).
-     *  - [OPTION_PRIORITIZE_PARTIALS] — already-downloading pieces are picked before
+     *  - [OPTION_PRIORITIZE_PARTIALS]: already-downloading pieces are picked before
      *    anything else (sorted rarest-first when that flag is also set). Forced
      *    automatically when partial pieces sprawl: more than `numPeers * 3/2` of
-     *    them, or more than [MAX_PARTIAL_BLOCKS] blocks' worth — `pick_pieces`'s
-     *    anti-sprawl cap.
-     *  - [OPTION_ON_PAROLE] — suppress the end-game tail (a parole peer must not
+     *    them, or more than [MAX_PARTIAL_BLOCKS] blocks' worth (`pick_pieces`'s
+     *    anti-sprawl cap).
+     *  - [OPTION_ON_PAROLE]: suppress the end-game tail (a parole peer must not
      *    double-request).
-     *  - Neither rarest nor sequential — random-start walk over all pickable pieces
+     *  - Neither rarest nor sequential: random-start walk over all pickable pieces
      *    (libtorrent's mode below `initial_picker_threshold`, usually combined with
      *    [OPTION_PRIORITIZE_PARTIALS]).
      *
-     * The returned blocks are **not** marked — the caller decides what to request
+     * The returned blocks are **not** marked. The caller decides what to request
      * and then calls [markAsDownloading]. Unlike upstream (which dedupes in
      * `request_a_block`), the result never repeats a block.
      *
@@ -871,8 +871,8 @@ class PiecePicker(
         val visited = HashSet<Int>()
         var remaining = numBlocksWanted
 
-        // take every free block of [piece] (in index order) until satisfied —
-        // the free-block half of add_blocks / add_blocks_downloading
+        // take every free block of [piece] (in index order) until satisfied.
+        // This is the free-block half of add_blocks / add_blocks_downloading
         fun takeFreeBlocks(piece: Int) {
             if (remaining <= 0 || !visited.add(piece)) return
             val dp = downloads[piece]
@@ -1010,13 +1010,13 @@ class PiecePicker(
 
     /**
      * Number of pieces in the *downloading* bucket only (partially requested, free
-     * blocks remain) — `m_downloads[piece_downloading].size()`, the count behind the
+     * blocks remain): `m_downloads[piece_downloading].size()`, the count behind the
      * partial-sprawl cap.
      */
     fun numDownloadingPieces(): Int = numDownloading
 
     /**
-     * Pieces in *any* download bucket (downloading/full/finished/zero-prio) —
+     * Pieces in *any* download bucket (downloading/full/finished/zero-prio):
      * `get_download_queue_size`. The strict end-game gate compares this to
      * [numWantLeft]: only when every wanted piece is already in the download queue
      * may a busy block be double-requested.
@@ -1024,7 +1024,7 @@ class PiecePicker(
     fun downloadQueueSize(): Int = numDownloadEntries
 
     /**
-     * Blocks of [piece] still free to request (not requested/writing/finished) —
+     * Blocks of [piece] still free to request (not requested/writing/finished),
      * derived from the `piece_info` counters. `snub_peer` uses this to decide
      * whether a stalled request actually blocks the piece's completion.
      */
@@ -1084,8 +1084,8 @@ class PiecePicker(
     }
 
     /**
-     * Re-classify [piece]'s download bucket from its block counters — port of
-     * `update_piece_state` (minus the reverse sub-states). Buckets:
+     * Re-classify [piece]'s download bucket from its block counters. This is a port
+     * of `update_piece_state` (minus the reverse sub-states). Buckets:
      *  * filtered → `zero_prio`
      *  * no active blocks → back to `open` (entry dropped by callers when empty)
      *  * some blocks still free → `downloading`
@@ -1190,7 +1190,7 @@ class PiecePicker(
         /** Pick rarest pieces first (the normal steady-state mode). `rarest_first`. */
         const val OPTION_RAREST_FIRST: Int = 1
 
-        /** Walk the pick order backwards — most common pieces first. `reverse`. */
+        /** Walk the pick order backwards, most common pieces first. `reverse`. */
         const val OPTION_REVERSE: Int = 2
 
         /** The peer is on parole: only exclusive picks, no end-game tail. `on_parole`. */

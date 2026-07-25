@@ -1,12 +1,12 @@
 package io.github.yuroyami.kitetorrent.session.engine
 
 /**
- * The unchoke decision — port of libtorrent's `choker.cpp`.
+ * The unchoke decision, the port of libtorrent's `choker.cpp`.
  *
  * BitTorrent is **tit-for-tat**: you only upload ("unchoke") to a small number of
- * peers, and you pick the ones that reward you most — while *downloading* that means
- * the peers feeding you the fastest; while *seeding*, the peers you can push to the
- * fastest. Everyone else stays "choked" (you refuse to upload to them). On top of that,
+ * peers, and you pick the ones that give you the most. While *downloading* that means
+ * the peers sending to you the fastest. While *seeding*, it means the peers you can
+ * send to the fastest. Everyone else stays "choked" (you refuse to upload to them). On top of that,
  * one rotating **optimistic** slot unchokes a random choked peer so you can discover
  * new fast partners you'd otherwise never try.
  *

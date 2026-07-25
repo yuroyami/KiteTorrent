@@ -10,7 +10,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * BEP-11 `ut_pex` codec tests — checks the compact 4-byte-IP + 2-byte-port encoding
+ * BEP-11 `ut_pex` codec tests. They check the compact 4-byte-IP + 2-byte-port encoding
  * against an exact golden byte vector and round-trips added/dropped IPv4 (and IPv6)
  * peers with their flags.
  */

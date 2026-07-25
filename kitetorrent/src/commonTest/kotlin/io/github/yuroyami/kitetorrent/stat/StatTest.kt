@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Tests for [StatChannel] / [Stat] — the port of libtorrent's `stat_channel` and
+ * Tests for [StatChannel] / [Stat]: the port of libtorrent's `stat_channel` and
  * `stat` (stat.hpp, stat.cpp).
  *
  * Golden rate values are computed by hand from `stat_channel::second_tick`:

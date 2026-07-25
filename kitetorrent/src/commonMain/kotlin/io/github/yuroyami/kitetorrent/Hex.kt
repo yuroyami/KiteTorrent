@@ -27,7 +27,7 @@ object Hex {
 
     /**
      * Decode a hex string to bytes. Returns null if [s] has odd length or
-     * contains a non-hex character — mirroring libtorrent's `from_hex` returning
+     * contains a non-hex character, mirroring libtorrent's `from_hex` returning
      * false rather than throwing on malformed input.
      */
     fun decodeOrNull(s: String): ByteArray? {

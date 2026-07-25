@@ -147,7 +147,7 @@ data class PeerBlockedAlert(
 }
 
 /**
- * Generated when a peer is snubbed — it stopped sending data we requested.
+ * Generated when a peer is snubbed, because it stopped sending data we requested.
  * Ported from `libtorrent::peer_snubbed_alert` (alert_type 21).
  */
 data class PeerSnubbedAlert(

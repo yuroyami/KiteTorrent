@@ -2,14 +2,14 @@ package io.github.yuroyami.kitetorrent.crypto
 
 /**
  * Incremental SHA-1 (FIPS 180-1). Pure-Kotlin port of libtorrent's bundled
- * public-domain SHA-1 (src/sha1.cpp) — libtorrent uses this when no platform
- * crypto backend (CommonCrypto/CNG/libcrypto/gcrypt) is available, which is
- * exactly our situation in commonMain.
+ * public-domain SHA-1 (src/sha1.cpp). libtorrent uses this when no platform crypto
+ * backend (CommonCrypto, CNG, libcrypto, gcrypt) is available, which is also our
+ * situation in commonMain.
  *
  * Byte-for-byte compatible with the reference: verified against the FIPS test
  * vectors ("abc", the 56-char string, and a million 'a's) in the test suite.
  *
- * Not a cryptographically hardened implementation — BitTorrent uses SHA-1 as a
+ * This is not a cryptographically hardened implementation. BitTorrent uses SHA-1 as a
  * content checksum (info-hashes, piece hashes), not for security.
  */
 class Sha1 {

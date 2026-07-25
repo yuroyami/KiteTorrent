@@ -14,10 +14,10 @@ package io.github.yuroyami.kitetorrent.util
  * Two important fidelity notes about the libtorrent source this is ported from:
  *  1. libtorrent's [encode] equivalent only exists as `base32encode_i2p`, which uses
  *     the **lowercase** alphabet `a-z2-7` and emits **no padding** (i2p convention).
- *     RFC 4648 — which is what v2 magnet links and most of the world expect — uses
+ *     RFC 4648, which is what v2 magnet links and most of the world expect, uses
  *     the **uppercase** alphabet `A-Z2-7` and pads the final group to a multiple of 8
  *     characters with `=`. This object implements the RFC 4648 behaviour (uppercase +
- *     padding); the exact same bit-packing as `base32encode_i2p` is reused, only the
+ *     padding). It reuses the exact same bit-packing as `base32encode_i2p`; only the
  *     alphabet table and the trailing `=` padding differ. See [encodeI2p] for the
  *     verbatim i2p behaviour.
  *  2. libtorrent's `base32decode` is already standard-alphabet (`A-Z2-7`) and is
@@ -58,7 +58,7 @@ object Base32 {
         encodeImpl(bytes, offset, length, RFC_ALPHABET, pad = true)
 
     /**
-     * Encode [bytes] using i2p's lowercase, **unpadded** base32 alphabet — the exact
+     * Encode [bytes] using i2p's lowercase, **unpadded** base32 alphabet: the exact
      * behaviour of libtorrent's `base32encode_i2p`.
      */
     fun encodeI2p(bytes: ByteArray, offset: Int = 0, length: Int = bytes.size - offset): String =

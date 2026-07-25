@@ -7,7 +7,7 @@ import io.github.yuroyami.kitetorrent.bencode.Entry
 import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
 
 /**
- * BEP-11 "Peer Exchange (PEX)" (`ut_pex`) — the pure message codec, ported from
+ * BEP-11 "Peer Exchange (PEX)" (`ut_pex`). This is the pure message codec, ported from
  * libtorrent's `ut_pex.cpp` (src/ut_pex.cpp, `ut_pex_plugin::tick` builds the
  * message and `ut_pex_peer_plugin::on_extended` parses it).
  *
@@ -21,10 +21,10 @@ import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
  *
  * | key         | contents                                                    |
  * |-------------|-------------------------------------------------------------|
- * | `added`     | compact IPv4 peers — 6 bytes each: 4-byte IP + 2-byte port  |
+ * | `added`     | compact IPv4 peers, 6 bytes each: 4-byte IP + 2-byte port   |
  * | `added.f`   | one [PexFlags] byte per peer in `added`, same order         |
  * | `dropped`   | compact IPv4 peers that left since the last message         |
- * | `added6`    | compact IPv6 peers — 18 bytes each: 16-byte IP + 2-byte port |
+ * | `added6`    | compact IPv6 peers, 18 bytes each: 16-byte IP + 2-byte port |
  * | `added6.f`  | one flags byte per peer in `added6`                         |
  * | `dropped6`  | compact IPv6 peers that left                                |
  *
@@ -34,7 +34,8 @@ import io.github.yuroyami.kitetorrent.io.ByteArrayBuilder
  * libtorrent only parses `added`/`added.f` when their lengths agree
  * (`added.f.length == added.length / 6`); a mismatch means the whole `added` list
  * is ignored. [parse] reproduces that. The internal `pex_lt_v2` flag (bit 0x10) is
- * masked off on receive ("disregard it from the internet") — see [PexFlags.RECEIVE_MASK].
+ * masked off on receive, because it must not be trusted from the wire. See
+ * [PexFlags.RECEIVE_MASK].
  *
  * This class is the codec only; the once-a-minute scheduling, the dedup against
  * previously-sent peers, and the `add_peer` side effects live in the peer-plugin
@@ -49,32 +50,32 @@ object UtPex {
     const val IPV6_ENTRY_SIZE: Int = 18
 
     /**
-     * The per-peer PEX flag bits — port of the `pex_*` constants in
-     * `libtorrent/extensions/ut_pex.hpp` (referenced from `ut_pex.cpp`). These ride
-     * in the `added.f` / `added6.f` byte strings.
+     * The per-peer PEX flag bits, the port of the `pex_*` constants in
+     * `libtorrent/extensions/ut_pex.hpp` (referenced from `ut_pex.cpp`). They travel
+     * in the `added.f` and `added6.f` byte strings.
      */
     object PexFlags {
-        /** `0x01` — peer supports (BitTorrent) encryption. `pex_encryption`. */
+        /** `0x01`: peer supports (BitTorrent) encryption. `pex_encryption`. */
         const val ENCRYPTION: Int = 0x01
 
-        /** `0x02` — peer is a seed. `pex_seed`. */
+        /** `0x02`: peer is a seed. `pex_seed`. */
         const val SEED: Int = 0x02
 
-        /** `0x04` — peer supports uTP. Positive-only (0 doesn't imply no-uTP). `pex_utp`. */
+        /** `0x04`: peer supports uTP. Positive-only (0 does not imply no uTP). `pex_utp`. */
         const val UTP: Int = 0x04
 
-        /** `0x08` — peer supports the hole-punching protocol. `pex_holepunch`. */
+        /** `0x08`: peer supports the hole-punching protocol. `pex_holepunch`. */
         const val HOLEPUNCH: Int = 0x08
 
         /**
-         * `0x10` — internal "lt v2" marker (`pex_lt_v2`). libtorrent strips this
+         * `0x10`: the internal "lt v2" marker (`pex_lt_v2`). libtorrent strips this
          * from received flags with `flags &= ~pex_lt_v2`; it is never trusted from
          * the wire.
          */
         const val LT_V2: Int = 0x10
 
         /**
-         * The mask applied to a received flags byte — every bit except the internal
+         * The mask applied to a received flags byte: every bit except the internal
          * [LT_V2]. `parse` ANDs each incoming flag with this, matching
          * `flags &= ~pex_lt_v2` in `on_extended`.
          */
@@ -90,7 +91,7 @@ object UtPex {
          * flags |= p->supports_holepunch() ? pex_holepunch : pex_flags_t{};
          * ```
          *
-         * uTP and hole-punch are positive-only signals — clearing them means
+         * uTP and hole-punch are positive-only signals. A cleared bit means
          * "unknown", not "unsupported". The result is `0..0x0F`; the internal
          * [LT_V2] bit is never set by this builder (it is local-only state).
          */
@@ -125,7 +126,7 @@ object UtPex {
      * The default cap on how many `added` peers a single PEX message carries, so a
      * packet stays small. libtorrent uses `max_peer_entries = 100`
      * (`ut_pex.cpp:61`); this port caps at 50 per the session policy. `dropped`
-     * peers are *not* counted against this limit — only newly-added ones, matching
+     * peers are *not* counted against this limit. Only newly-added ones count, matching
      * `if (num_added >= max_peer_entries) break;` in `ut_pex_plugin::tick`.
      */
     const val MAX_ADDED_ENTRIES: Int = 50
@@ -134,9 +135,9 @@ object UtPex {
      * One peer advertised in (or dropped from) a PEX message.
      *
      * The address is kept as raw network-byte-order [ip] bytes (4 for IPv4, 16 for
-     * IPv6) plus the [port], exactly as it appears on the wire — this codec does no
-     * string formatting or DNS. [host] renders a dotted-quad / colon-hex literal for
-     * convenience and tests.
+     * IPv6) plus the [port], exactly as it appears on the wire. This codec does no
+     * string formatting and no DNS. [host] renders a dotted-quad or colon-hex literal
+     * for convenience and tests.
      *
      * @property ip the address bytes, length 4 (IPv4) or 16 (IPv6), big-endian.
      * @property port the TCP port, 0..65535.
@@ -152,7 +153,8 @@ object UtPex {
 
         /**
          * The address as a literal string: dotted-quad for IPv4, fully-expanded
-         * colon-hex for IPv6 (no `::` compression — unambiguous and round-trips).
+         * colon-hex for IPv6. There is no `::` compression, so the form is unambiguous
+         * and round-trips.
          */
         val host: String
             get() = if (isV4) {
@@ -174,7 +176,7 @@ object UtPex {
                 sb.toString()
             }
 
-        /** "host:port" with the [host] literal — convenience for logging and tests. */
+        /** "host:port" with the [host] literal, for logging and tests. */
         val hostPort: String get() = "$host:$port"
 
         /** True if this peer's [flags] advertise BitTorrent encryption ([PexFlags.ENCRYPTION]). */
@@ -225,9 +227,9 @@ object UtPex {
 
     /**
      * A fully parsed PEX message: the four logical lists libtorrent reads out of the
-     * dict. IPv4 and IPv6 are merged here for convenience — each [PexPeer] knows its
-     * own family via [PexPeer.isV4] — while [encode] still writes them into the
-     * correct `added`/`added6` keys.
+     * dict. IPv4 and IPv6 are merged here for convenience, because each [PexPeer] knows
+     * its own family via [PexPeer.isV4]. [encode] still writes them into the correct
+     * `added` and `added6` keys.
      *
      * @property added peers newly seen since the last message (with flags).
      * @property dropped peers that left since the last message (no flags).
@@ -242,7 +244,7 @@ object UtPex {
     /**
      * Encode a PEX message from [added] and [dropped] peer lists. Each peer is
      * routed to its IPv4 or IPv6 key by address length; flags are written for added
-     * peers only (`added.f` / `added6.f`), never for dropped ones — matching
+     * peers only (`added.f` and `added6.f`), never for dropped ones. This matches
      * `ut_pex_plugin::tick`.
      *
      * Empty lists are still emitted as empty strings, the way libtorrent always
@@ -385,7 +387,7 @@ object UtPex {
     /**
      * Build a [PexPeer] from a literal IPv4 dotted-quad [host] (e.g. "1.2.3.4") and
      * a [port]. Returns `null` if [host] is not four decimal octets. IPv6 literals
-     * are not parsed here — construct those from raw bytes — to keep this codec free
+     * are not parsed here; construct those from raw bytes. That keeps this codec free
      * of a full address parser (the peer layer's `PeerAddress` does that).
      */
     fun peerFromIpv4(host: String, port: Int, flags: Int = 0): PexPeer? {
@@ -425,7 +427,7 @@ object UtPex {
     )
 
     /**
-     * Stateful per-connection PEX differ — the port of `ut_pex_plugin`'s
+     * Stateful per-connection PEX differ, the port of `ut_pex_plugin`'s
      * `m_old_peers` bookkeeping. The session holds one [Builder] per peer
      * connection (the peer we gossip *to*) and calls [tick] roughly once a minute
      * with the *current* swarm membership; the builder emits only the delta versus
@@ -442,8 +444,8 @@ object UtPex {
      * peers that don't fit this tick stay un-sent and will be picked up next tick
      * (they remain absent from the recorded "old" set). `dropped` is never capped.
      *
-     * Identity is the (`ip`,`port`) endpoint only — flags are not part of the key,
-     * so a peer that merely flips its seed bit is not re-advertised.
+     * Identity is the (`ip`,`port`) endpoint only. Flags are not part of the key, so a
+     * peer that only changes its seed bit is not re-advertised.
      *
      * Not thread-safe; call [tick] from the single coroutine that owns the
      * connection.
@@ -457,7 +459,7 @@ object UtPex {
         val knownCount: Int get() = old.size
 
         /**
-         * Compute and record the next PEX delta against [current] — the peers we
+         * Compute and record the next PEX delta against [current], which is the peers we
          * *should* be advertising right now (already filtered by the caller to
          * "proper bittorrent peers we're willing to share", as `send_peer` does in
          * libtorrent). Flags on each [current] peer should be built via
@@ -465,8 +467,8 @@ object UtPex {
          *
          * Returns the [BuildResult] to encode and send. After this call the
          * builder's internal "known" set reflects exactly the peers in [current]
-         * that fit under the [maxAdded] cap (plus those already known) — so the
-         * next tick diffs correctly.
+         * that fit under the [maxAdded] cap (plus those already known), so the next
+         * tick diffs correctly.
          */
         fun tick(current: Collection<PexPeer>): BuildResult {
             // start from the previous "old" set; we'll carve dropped out of it.
@@ -499,7 +501,7 @@ object UtPex {
             )
         }
 
-        /** Encode the next delta directly to wire bytes — [tick] then [encode]. */
+        /** Encode the next delta directly to wire bytes: [tick] then [encode]. */
         fun tickEncoded(current: Collection<PexPeer>): ByteArray {
             val r = tick(current)
             return encode(r.message.added, r.message.dropped, includeEmpty = true, maxAdded = maxAdded)

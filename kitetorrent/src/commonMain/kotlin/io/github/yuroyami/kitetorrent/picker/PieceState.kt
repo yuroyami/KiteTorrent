@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.picker
 
 /**
- * The four states a single block can be in — pure-Kotlin port of the anonymous
+ * The four states a single block can be in. This is a pure-Kotlin port of the anonymous
  * enum inside libtorrent's `piece_picker::block_info`
  * (include/libtorrent/piece_picker.hpp).
  *
@@ -11,7 +11,7 @@ package io.github.yuroyami.kitetorrent.picker
  * us a whole block at once), and may fall back to [NONE] on abort / write-failure.
  */
 enum class BlockState {
-    /** Not requested from anyone yet — free to be picked. */
+    /** Not requested from anyone yet, so any peer can be asked for it. */
     NONE,
 
     /** A request for this block is outstanding to at least one peer. */
@@ -25,7 +25,7 @@ enum class BlockState {
 }
 
 /**
- * Bookkeeping for one block of a *downloading* piece — port of
+ * Bookkeeping for one block of a *downloading* piece, the port of
  * `piece_picker::block_info`. Only pieces that are partially downloaded keep an
  * array of these (see [DownloadingPiece]); pieces we fully have or have never
  * touched carry none.
@@ -60,8 +60,8 @@ class BlockInfo {
 }
 
 /**
- * Tracks block allocations for a single piece that is currently being downloaded
- * — port of `piece_picker::downloading_piece`.
+ * Tracks block allocations for a single piece that is currently being downloaded.
+ * This is the port of `piece_picker::downloading_piece`.
  *
  * libtorrent stores the per-block [BlockInfo] objects in one big flat pool
  * (`m_block_info`) indexed via `info_idx * blocks_per_piece`; that's a memory
@@ -105,7 +105,7 @@ class DownloadingPiece(
 }
 
 /**
- * A snapshot of one piece's high-level state — port of
+ * A snapshot of one piece's high-level state, the port of
  * `piece_picker::piece_stats_t`. Returned by [PiecePicker.pieceStats].
  */
 data class PieceStats(

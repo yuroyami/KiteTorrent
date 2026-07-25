@@ -15,7 +15,7 @@ import io.github.yuroyami.kitetorrent.picker.DownloadPriority
 import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
 
 /**
- * Fast-resume (de)serialisation — the pure-Kotlin port of libtorrent's
+ * Fast-resume (de)serialisation: the pure-Kotlin port of libtorrent's
  * `write_resume_data()` (src/write_resume_data.cpp) and `read_resume_data()`
  * (src/read_resume_data.cpp).
  *
@@ -27,9 +27,9 @@ import io.github.yuroyami.kitetorrent.torrent.TorrentInfo
  * from an [AddTorrentParams]; [read] parses them back into one.
  *
  * The field names and value encodings are byte-for-byte those libtorrent uses, so a
- * file written here can be loaded by libtorrent and vice versa — e.g. the `pieces`
- * string is one byte per piece with bit 0 = "have" and bit 1 = "verified", and a peer
- * list is the concatenation of `address-bytes ++ big-endian-uint16-port`.
+ * file written here can be loaded by libtorrent and vice versa. For example, the
+ * `pieces` string is one byte per piece with bit 0 = "have" and bit 1 = "verified",
+ * and a peer list is the concatenation of `address-bytes ++ big-endian-uint16-port`.
  *
  * Scope: everything in the C++ functions for the non-deprecated build
  * (`TORRENT_ABI_VERSION != 1`, share-mode and super-seeding enabled, i2p disabled) is
@@ -48,13 +48,13 @@ object ResumeData {
     // ---- write ---------------------------------------------------------------
 
     /**
-     * Serialise [atp] to fast-resume bytes — the port of `write_resume_data_buf`
+     * Serialise [atp] to fast-resume bytes: the port of `write_resume_data_buf`
      * (`bencode(write_resume_data(atp))`).
      */
     fun write(atp: AddTorrentParams): ByteArray = Bencode.encode(writeEntry(atp))
 
     /**
-     * Build the resume-data [Entry] dictionary for [atp] — the port of
+     * Build the resume-data [Entry] dictionary for [atp]: the port of
      * `write_resume_data(add_torrent_params const&)`.
      */
     fun writeEntry(atp: AddTorrentParams): Entry {
@@ -257,7 +257,7 @@ object ResumeData {
     // ---- read ----------------------------------------------------------------
 
     /**
-     * Parse fast-resume [buffer] into an [AddTorrentParams] — the port of the throwing
+     * Parse fast-resume [buffer] into an [AddTorrentParams]: the port of the throwing
      * `read_resume_data(span<char const>, ...)` overload. Throws [TorrentException] on a
      * malformed or non-resume buffer (wrong/absent `file-format` tag, missing info-hash,
      * or a mismatching embedded info dict).
@@ -269,7 +269,7 @@ object ResumeData {
     }
 
     /**
-     * Parse an already-decoded resume-data node — the port of
+     * Parse an already-decoded resume-data node: the port of
      * `read_resume_data(bdecode_node const&, ...)`.
      */
     fun readNode(rd: BdecodeNode): AddTorrentParams {

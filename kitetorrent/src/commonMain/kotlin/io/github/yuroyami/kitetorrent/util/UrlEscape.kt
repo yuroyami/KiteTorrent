@@ -16,12 +16,12 @@ package io.github.yuroyami.kitetorrent.util
  * index:  0..1   "%+"
  *         2..10  ";?:@=&,$/"          (reserved)
  *        11..18  "-_!.~*()"           (unreserved specials; note ' is excluded
- *                                      because some buggy trackers choke on it)
+ *                                      because some buggy trackers reject it)
  *        19..    A-Z a-z 0-9          (alphanumerics)
  * ```
  *
  *  - [escape] (libtorrent `escape_string`) starts at offset **11**: it keeps only
- *    `-_!.~*()` and the alphanumerics, percent-encoding everything else — including
+ *    `-_!.~*()` and the alphanumerics, percent-encoding everything else, including
  *    `/`, `:`, `?`, `&`, `%` and so on. This is what you use to encode an individual
  *    query-string *value*.
  *  - [escapePath] (libtorrent `escape_path`) starts at offset **10**: identical to
@@ -58,7 +58,7 @@ object UrlEscape {
      * Percent-encode the text [s] (libtorrent `escape_string`). Everything except
      * `-_!.~*()` and `[A-Za-z0-9]` is escaped.
      *
-     * The string is first converted to its UTF-8 bytes, then each *byte* is encoded —
+     * The string is first converted to its UTF-8 bytes, then each *byte* is encoded,
      * so non-ASCII characters round-trip correctly through [unescape] when its result
      * is decoded back from UTF-8.
      */
@@ -100,7 +100,7 @@ object UrlEscape {
 
     /**
      * True if [s] (interpreted as its UTF-8 bytes) contains any character that would
-     * have to be percent-encoded in a URL — libtorrent `need_encoding`. `%`, `+` and
+     * have to be percent-encoded in a URL: libtorrent `need_encoding`. `%`, `+` and
      * the reserved set do *not* count as needing encoding.
      */
     fun needsEncoding(s: String): Boolean = needsEncoding(s.encodeToByteArray())

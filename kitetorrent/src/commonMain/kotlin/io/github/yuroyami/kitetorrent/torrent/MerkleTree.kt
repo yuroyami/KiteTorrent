@@ -5,7 +5,7 @@ import io.github.yuroyami.kitetorrent.Digest32
 import io.github.yuroyami.kitetorrent.Sha256Hash
 
 /**
- * In-memory BitTorrent v2 merkle tree for one file — a focused pure-computation
+ * In-memory BitTorrent v2 merkle tree for one file: a focused pure-computation
  * port of libtorrent's `aux::merkle_tree` (`include/libtorrent/aux_/merkle_tree.hpp`
  * + `src/merkle_tree.cpp`).
  *
@@ -26,14 +26,14 @@ import io.github.yuroyami.kitetorrent.Sha256Hash
  *  - verifying a candidate root / piece layer against a known root,
  *  - tracking which block hashes have been *verified* against the root.
  *
- * The invariant libtorrent maintains — interior nodes are either correct or
- * all-zero, never wrong — is preserved here for the verification helpers.
+ * The verification helpers rely on the invariant libtorrent maintains: interior
+ * nodes are either correct or all-zero, never wrong.
  *
  * Index arithmetic and the standalone root computation live in [Merkle].
  *
  * @param numBlocks number of real (non-padding) block hashes in the file. Must be
  *   `>= 1`.
- * @param blocksPerPiece blocks contained in one piece — a power of two. This
+ * @param blocksPerPiece blocks contained in one piece, always a power of two. This
  *   fixes where the piece layer sits relative to the leaves. For the common case
  *   where a piece *is* a block, pass `1`.
  * @param root the file's known root hash (the apex). Verification compares against
@@ -54,7 +54,7 @@ class MerkleTree(
     }
 
     /**
-     * `blocks_per_piece_log` in libtorrent — `log2(blocksPerPiece)`. Also the
+     * `blocks_per_piece_log` in libtorrent: `log2(blocksPerPiece)`. Also the
      * number of tree levels between the block layer and the piece layer (0 when a
      * piece is a single block). Stored as a small int.
      */
@@ -68,7 +68,7 @@ class MerkleTree(
     /** Blocks per piece, reconstructed from [blocksPerPieceLog]. */
     fun blocksPerPiece(): Int = 1 shl blocksPerPieceLog
 
-    /** Padded leaf count — `numBlocks` rounded up to a power of two. */
+    /** Padded leaf count: `numBlocks` rounded up to a power of two. */
     val numLeafs: Int = Merkle.numLeafs(numBlocks)
 
     /** Total number of nodes in the (padded) tree. */
@@ -85,7 +85,7 @@ class MerkleTree(
 
     /**
      * The flat node array. Index 0 is the root, [blockLayerStart] is the first
-     * block hash. All-zero entries are "unknown" — exactly libtorrent's
+     * block hash. All-zero entries are "unknown", exactly libtorrent's
      * convention. Mutable so the tree can be filled incrementally.
      */
     private val tree: Array<Sha256Hash> = Array(size) { ZERO }
@@ -159,7 +159,7 @@ class MerkleTree(
      *
      * This mirrors how libtorrent reconstructs a tree from just the piece layer
      * (`load_piece_layer` / `build_vector` for `piece_layer` mode). It does **not**
-     * invent real block hashes — only the piece layer and above are meaningful.
+     * invent real block hashes. Only the piece layer and above are meaningful.
      *
      * @param pieces exactly [numPieces] piece hashes, in order.
      */
@@ -204,9 +204,9 @@ class MerkleTree(
     // --- verification --------------------------------------------------------
 
     /**
-     * True if every adjacent leaf pair in this tree hashes to its stored parent —
-     * i.e. the layer immediately above the leaves is internally consistent. Direct
-     * port of `merkle_validate_single_layer`. (A one-node tree is trivially valid.)
+     * True if every adjacent leaf pair in this tree hashes to its stored parent.
+     * That means the layer immediately above the leaves is internally consistent.
+     * Direct port of `merkle_validate_single_layer`. (A one-node tree is trivially valid.)
      */
     fun validateSingleLayer(): Boolean {
         if (size == 1) return true
@@ -251,7 +251,7 @@ class MerkleTree(
 
     /**
      * Sets a single block hash and, if the surrounding subtree is now fully known,
-     * verifies it against the already-known ancestor hashes — marking the affected
+     * verifies it against the already-known ancestor hashes, marking the affected
      * blocks as verified on success. A focused analogue of `merkle_tree::set_block`
      * for the full-tree representation.
      *
@@ -338,9 +338,9 @@ class MerkleTree(
     /**
      * Loads a file's whole **piece layer** (the per-piece roots) and validates it
      * against the [expectedRoot] before committing. On success the piece layer and
-     * all of its ancestors up to the root are filled in (the block layer below the
-     * piece layer is left as padding/unknown — only piece-level and above become
-     * meaningful, exactly like libtorrent's `mode_t::piece_layer`).
+     * all of its ancestors up to the root are filled in. The block layer below the
+     * piece layer stays padding/unknown, so only piece-level nodes and above become
+     * meaningful, exactly like libtorrent's `mode_t::piece_layer`.
      *
      * Direct analogue of `merkle_tree::load_piece_layer`: it returns `false` (and
      * mutates nothing) when the supplied layer is the wrong size or fails to fold
@@ -465,21 +465,21 @@ class MerkleTree(
 
     /**
      * Extracts the hashes needed to answer a BitTorrent v2 `hash_request` (BEP-52) from this
-     * tree — the inverse of [addHashesWithProof] / [Merkle.verifyProof]. Direct port of
+     * tree. This is the inverse of [addHashesWithProof] / [Merkle.verifyProof]. Direct port of
      * `merkle_tree::get_hashes` (`src/merkle_tree.cpp`).
      *
-     * Given a request for `count` hashes at layer `base` (counted *up from the block layer*:
-     * `base == 0` is the block/leaf layer, `base == blocksPerPieceLog` the piece layer)
-     * starting at `index` within that layer, plus `proofLayers` of uncle hashes to anchor the
-     * run up toward the root, this returns the run of `count` hashes followed by the uncle
-     * hashes — exactly the [PeerMessage.Hashes.hashes] layout the requester folds with
-     * [Merkle.verifyProof].
+     * A request names `count` hashes at layer `base`, starting at `index` within that layer,
+     * plus `proofLayers` of uncle hashes to anchor the run up toward the root. Layers are
+     * counted *up from the block layer*: `base == 0` is the block/leaf layer, and
+     * `base == blocksPerPieceLog` is the piece layer. This returns the run of `count` hashes
+     * followed by the uncle hashes, exactly the [PeerMessage.Hashes.hashes] layout the
+     * requester folds with [Merkle.verifyProof].
      *
      * Returns `null` (libtorrent's empty-vector decline) when we cannot answer with hashes
      * that are all present in our tree: any requested run node is missing (and is not an
      * implicit zero pad), or any required proof node / sibling is missing, or the request
-     * indices fall outside the tree. We never fabricate hashes — only nodes actually present
-     * in [tree] are returned, so anything returned verifies against our known root.
+     * indices fall outside the tree. We never fabricate hashes. We return only nodes actually
+     * present in [tree], so anything returned verifies against our known root.
      *
      * @param base the requested layer, counted up from the block layer (0 = block leaves).
      * @param index offset of the first hash within the `base` layer (>= 0).
@@ -548,7 +548,7 @@ class MerkleTree(
         /** The block hash was accepted (and, where possible, verified). */
         OK,
 
-        /** The enclosing subtree root is not yet known — can't verify yet. */
+        /** The enclosing subtree root is not yet known, so we cannot verify yet. */
         UNKNOWN,
 
         /** The subtree failed to hash to its known root (some block is wrong). */

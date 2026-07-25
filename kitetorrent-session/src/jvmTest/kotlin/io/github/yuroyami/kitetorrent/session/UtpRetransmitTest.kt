@@ -18,10 +18,10 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * uTP reliability proof for the RTO path: the LAST data packet is dropped — nothing
+ * uTP reliability proof for the RTO path: the test drops the LAST data packet. Nothing
  * arrives after it, so there's no SACK and no duplicate-ACK to trigger fast-resend. The
- * only way the transfer completes is the retransmission timer firing. (Fast-resend is
- * covered separately by [UtpFastResendTest].)
+ * only way the transfer completes is the retransmission timer firing.
+ * ([UtpFastResendTest] covers fast-resend separately.)
  */
 class UtpRetransmitTest {
 
@@ -51,7 +51,7 @@ class UtpRetransmitTest {
                 val data = sockB.receive().data
                 val pkt = parseUtpPacket(data)
                 // drop the final short packet (payload < full MSS): nothing follows it, so
-                // there's no SACK/dup-ACK — only the RTO timer can recover it.
+                // there's no SACK/dup-ACK. Only the RTO timer can recover it.
                 if (!droppedOne && pkt != null &&
                     pkt.header.type == UtpType.ST_DATA &&
                     pkt.payload.isNotEmpty() && pkt.payload.size < 1400

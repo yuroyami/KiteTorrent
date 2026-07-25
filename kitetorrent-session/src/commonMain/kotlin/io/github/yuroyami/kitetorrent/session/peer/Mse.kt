@@ -15,7 +15,7 @@ class MseException(message: String) : Exception(message)
 
 /**
  * A [ByteStream] that transparently RC4-encrypts writes and decrypts reads for an
- * established MSE/PE connection — the live counterpart of libtorrent's `rc4_handler`
+ * established MSE/PE connection. This is the live counterpart of libtorrent's `rc4_handler`
  * sitting in `bt_peer_connection`'s send/recv path. RC4 is a byte-stream cipher, so the
  * chunk boundaries a [PeerConnection] happens to read/write in are irrelevant; only the
  * total byte order matters, and the per-direction locks keep encrypt-order == wire-order.
@@ -55,10 +55,10 @@ class PrefixedByteStream(prefix: ByteArray, private val raw: ByteStream) : ByteS
 }
 
 /**
- * The MSE/PE (Message Stream Encryption / Protocol Encryption) handshake — the live
- * automaton libtorrent runs in `bt_peer_connection.cpp` (`write_pe1_2_dhkey`,
+ * The MSE/PE (Message Stream Encryption / Protocol Encryption) handshake. This is the
+ * live automaton libtorrent runs in `bt_peer_connection.cpp` (`write_pe1_2_dhkey`,
  * `write_pe3_sync`, `write_pe4_sync`, `read_pe_*`). It performs the Diffie-Hellman
- * exchange, the sync-hash / VC obfuscation dance, and crypto negotiation, then returns a
+ * exchange, the sync-hash and VC obfuscation steps, and crypto negotiation, then returns a
  * transport ([MseByteStream] when RC4 is selected, the raw stream when plaintext is) over
  * which the normal BitTorrent handshake proceeds.
  *
@@ -71,8 +71,9 @@ class PrefixedByteStream(prefix: ByteArray, private val raw: ByteStream) : ByteS
  * B->A: ENCRYPT(VC, crypto_select, len(PadD), PadD), ENCRYPT2(payload)
  * ```
  * `S` is the DH shared secret, `SKEY` the v1 info-hash. We send an empty IA (len 0) and
- * run the BitTorrent handshake over the established channel afterwards — one extra
- * round-trip versus piggy-backing it, but materially simpler and fully interoperable.
+ * run the BitTorrent handshake over the established channel afterwards. That costs one
+ * extra round-trip compared with sending it inside IA, but it is simpler and fully
+ * interoperable.
  */
 object Mse {
 
@@ -198,7 +199,7 @@ object Mse {
         if (iaLen > 0) enc.decrypt(raw.readExactly(iaLen))              // initial payload (we expect none)
 
         // crypto_select: mask the peer's offer by what we allow, then pick a single bit.
-        // Port of bt_peer_connection.cpp:3120-3148 — when prefer_rc4 keep the most significant
+        // Port of bt_peer_connection.cpp:3120-3148. When prefer_rc4 keep the most significant
         // set bit (rc4), otherwise the least significant (plaintext); empty intersection fails.
         val allowed = if (allowedEncLevel and MseCrypto.CRYPTO_BOTH == 0) MseCrypto.CRYPTO_BOTH
         else allowedEncLevel and MseCrypto.CRYPTO_BOTH
@@ -218,7 +219,7 @@ object Mse {
 
     /**
      * True if [bytes] begin with a plaintext BitTorrent handshake (`0x13` + "BitTorrent
-     * protocol") — the engine's discriminator between a plaintext peer and an MSE peer
+     * protocol"). The engine uses this to tell a plaintext peer from an MSE peer
      * (whose first bytes are a random DH public key).
      */
     fun looksLikePlaintextHandshake(bytes: ByteArray): Boolean {
@@ -237,7 +238,7 @@ object Mse {
 
     /**
      * Read and discard bytes from [raw] until its most-recent [pattern].size bytes equal
-     * [pattern] (which is itself consumed) — the resync libtorrent does to find the start
+     * [pattern] (which is itself consumed). This is the resync libtorrent does to find the start
      * of the obfuscated handshake past a variable-length pad. Fails after [maxSkip] bytes
      * so a non-MSE peer can't make us read forever.
      */

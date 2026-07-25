@@ -5,7 +5,7 @@ import io.github.yuroyami.kitetorrent.Sha1Hash
 import io.github.yuroyami.kitetorrent.peer.PeerAddress
 
 /**
- * One node in the DHT routing table — the pure-Kotlin port of libtorrent's
+ * One node in the DHT routing table: the pure-Kotlin port of libtorrent's
  * `node_entry` (`include/libtorrent/kademlia/node_entry.hpp`,
  * `src/kademlia/node_entry.cpp`).
  *
@@ -17,12 +17,12 @@ import io.github.yuroyami.kitetorrent.peer.PeerAddress
  * the BEP 42 [verified] check and per-IP de-duplication.
  *
  * **Counters & flags** (ported verbatim):
- *  - [rtt] — the smoothed round-trip time in milliseconds; `0xffff` means
+ *  - [rtt]: the smoothed round-trip time in milliseconds; `0xffff` means
  *    "unknown". [updateRtt] applies libtorrent's `rtt*2/3 + new/3` EWMA.
- *  - [timeoutCount] — consecutive failed requests. The sentinel `0xff` means
+ *  - [timeoutCount]: consecutive failed requests. The sentinel `0xff` means
  *    "never pinged" (see [pinged]); `0` means "confirmed up" (see [confirmed]).
- *  - [verified] — the node id matches its IP per BEP 42 ([verifyId]). Used as the
- *    primary key in the "which node is better" ordering ([isBetterThan]).
+ *  - [verified]: the node id matches its IP per BEP 42 ([verifyId]). The
+ *    "which node is better" ordering ([isBetterThan]) uses it as the primary key.
  *
  * This is a mutable value object (libtorrent mutates entries in place inside the
  * buckets), so it is a plain class with `var` fields rather than a `data class`.
@@ -58,7 +58,7 @@ class NodeEntry {
     var verified: Boolean
 
     /**
-     * Full constructor — port of
+     * Full constructor: port of
      * `node_entry(node_id const&, udp::endpoint const&, int rtt, bool pinged)`.
      *
      * @param pinged whether we have already had a verified response from this
@@ -78,12 +78,12 @@ class NodeEntry {
         this.addr = PeerAddress.parseOrNull(host)
         this.rtt = rtt and 0xffff
         this.timeoutCount = if (pinged) 0 else NOT_PINGED
-        // verify_id(id_, ep.address()) — un-parseable hosts can't be verified.
+        // verify_id(id_, ep.address()): un-parseable hosts can't be verified.
         this.verified = addr != null && verifyId(id, addr)
     }
 
     /**
-     * Endpoint-only constructor with an unknown (all-zero) id — port of
+     * Endpoint-only constructor with an unknown (all-zero) id: port of
      * `explicit node_entry(udp::endpoint const& ep)`. Such an entry is
      * "not pinged" and "not verified".
      */

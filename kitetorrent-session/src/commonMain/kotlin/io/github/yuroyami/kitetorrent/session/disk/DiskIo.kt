@@ -10,7 +10,7 @@ data class BlockRequest(val piece: Int, val offset: Int, val length: Int)
 data class PieceHashes(val v1: Sha1Hash?, val v2Leaves: List<Sha256Hash>)
 
 /**
- * The disk subsystem boundary — the Kotlin counterpart of libtorrent's
+ * The disk subsystem boundary. This is the Kotlin counterpart of libtorrent's
  * `disk_interface` (disk_interface.hpp). libtorrent dispatches each operation to a
  * thread pool and hands back the result through a completion callback; here every
  * operation simply suspends, so the caller writes straight-line coroutine code and
@@ -41,7 +41,7 @@ interface DiskIo {
     suspend fun close()
 
     /**
-     * Move all storage to [newSavePath] — the counterpart of libtorrent's
+     * Move all storage to [newSavePath], the counterpart of libtorrent's
      * `async_move_storage` (storage_utils.cpp `move_storage`). Open handles are flushed
      * and closed, the on-disk files (and any part-file) are relocated under the new save
      * path, and subsequent reads/writes target the new location. A best-effort, no-op
@@ -50,7 +50,7 @@ interface DiskIo {
     suspend fun move(newSavePath: String) {}
 
     /**
-     * Rename the file at [fileIndex] to [newName] — the counterpart of libtorrent's
+     * Rename the file at [fileIndex] to [newName], the counterpart of libtorrent's
      * `async_rename_file`. [newName] is a torrent-relative path ('/'-separated). The
      * default is a no-op for backends without on-disk file names.
      */
@@ -58,7 +58,7 @@ interface DiskIo {
 }
 
 /**
- * How files are laid out on disk — port of libtorrent's `storage_mode_t`
+ * How files are laid out on disk. This is the port of libtorrent's `storage_mode_t`
  * (storage_defs.hpp).
  */
 enum class StorageMode {

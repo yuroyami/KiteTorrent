@@ -6,8 +6,8 @@ import io.github.yuroyami.kitetorrent.dht.compareRef
 import io.github.yuroyami.kitetorrent.dht.distance
 
 /**
- * The pure candidate bookkeeping of an iterative Kademlia lookup — the
- * network-free heart of libtorrent's `traversal_algorithm`
+ * The pure candidate bookkeeping of an iterative Kademlia lookup. This is the
+ * network-free core of libtorrent's `traversal_algorithm`
  * (`src/kademlia/traversal_algorithm.cpp`). [DhtNode.getPeers] drives one of these:
  * it seeds the state with the routing table's closest nodes, then repeatedly asks the
  * state for the next batch to query ([next]), fires the actual `get_peers`/`find_node`
@@ -17,8 +17,8 @@ import io.github.yuroyami.kitetorrent.dht.distance
  * this target, kept **sorted by XOR distance to the target** and de-duplicated by node
  * id (`traversal_algorithm::add_entry` inserts with `std::lower_bound` under
  * `compare_ref` and drops duplicates). Each entry tracks the three observer states that
- * matter — *not yet queried*, *queried/in-flight*, and *responded/alive* (the
- * `flag_queried` / `flag_alive` bits in `observer`). The lookup stops ([isDone]) once the
+ * matter: *not yet queried*, *queried and in flight*, and *responded and alive*. Those
+ * are the `flag_queried` and `flag_alive` bits in `observer`. The lookup stops ([isDone]) once the
  * closest [resultsTarget] entries have all responded with nothing closer to add, exactly
  * `add_requests`'s completion test ("`results_target` completed results without finding
  * any still in flight closer ones").
@@ -46,16 +46,16 @@ import io.github.yuroyami.kitetorrent.dht.distance
  * @param target the lookup target id (an info-hash for `get_peers`, our own id for a
  *   bootstrap `find_node`).
  * @param resultsTarget how many of the closest nodes must respond before the lookup is
- *   done — Kademlia's `k` (libtorrent uses `m_table.bucket_size()`, default 8).
+ *   done. This is Kademlia's `k` (libtorrent uses `m_table.bucket_size()`, default 8).
  * @param branchFactor the maximum number of concurrent in-flight queries among the top
- *   candidates — Kademlia's α (libtorrent's `m_branch_factor`, default 3).
+ *   candidates. This is Kademlia's α (libtorrent's `m_branch_factor`, default 3).
  */
 class TraversalState(
     val target: Sha1Hash,
     val resultsTarget: Int = DEFAULT_RESULTS_TARGET,
     val branchFactor: Int = DEFAULT_BRANCH_FACTOR,
 ) {
-    /** Per-candidate progress — the subset of `observer`'s flags the traversal needs. */
+    /** Per-candidate progress: the subset of `observer`'s flags the traversal needs. */
     enum class Status { UNQUERIED, IN_FLIGHT, ALIVE, FAILED }
 
     /** One node in the result list, mutated in place as its query progresses. */
@@ -84,13 +84,13 @@ class TraversalState(
         return true
     }
 
-    /** Bulk [add] — convenience for seeding from a `find_node` / `nodes` reply. */
+    /** Bulk [add], for seeding from a `find_node` or `nodes` reply. */
     fun addAll(nodes: Iterable<CompactNode>) {
         for (n in nodes) add(n)
     }
 
     /**
-     * The next batch of candidates to query — the unqueried nodes nearest the target,
+     * The next batch of candidates to query: the unqueried nodes nearest the target,
      * enough to bring the number of in-flight queries (among the closest [resultsTarget])
      * up to [branchFactor]. Port of the request-issuing loop in `add_requests`: it walks
      * the sorted results, counts alive nodes against `results_target`, counts in-flight
@@ -135,9 +135,9 @@ class TraversalState(
     /**
      * `true` once the lookup has converged: among the closest [resultsTarget] live
      * candidates there is nothing still in flight and nothing left unqueried that is
-     * closer than them. Port of `add_requests`'s completion condition — we have found
-     * `results_target` alive nodes with no closer in-flight/unqueried work, or the whole
-     * result list is exhausted.
+     * closer than them. Port of `add_requests`'s completion condition. Either we have
+     * found `results_target` alive nodes with no closer in-flight or unqueried work, or
+     * the whole result list is exhausted.
      */
     fun isDone(): Boolean {
         var alive = 0
@@ -157,7 +157,7 @@ class TraversalState(
         return results.none { it.status == Status.UNQUERIED || it.status == Status.IN_FLIGHT }
     }
 
-    /** The [count] closest nodes that actually responded — the lookup's usable output. */
+    /** The [count] closest nodes that responded. This is the lookup's usable output. */
     fun closestAlive(count: Int = resultsTarget): List<CompactNode> =
         results.asSequence()
             .filter { it.status == Status.ALIVE }
@@ -182,16 +182,16 @@ class TraversalState(
     }
 
     companion object {
-        /** Kademlia `k` — libtorrent's `m_table.bucket_size()` default. */
+        /** Kademlia `k`, libtorrent's `m_table.bucket_size()` default. */
         const val DEFAULT_RESULTS_TARGET: Int = 8
 
-        /** Kademlia α — libtorrent's `m_branch_factor` default. */
+        /** Kademlia α, libtorrent's `m_branch_factor` default. */
         const val DEFAULT_BRANCH_FACTOR: Int = 3
     }
 }
 
 /**
- * Order [nodes] nearest-first by XOR distance to [target] — the standalone form of the
+ * Order [nodes] nearest-first by XOR distance to [target]. This is the standalone form of the
  * comparator [TraversalState] inserts under, exposed for callers (and tests) that just
  * want a sorted snapshot of compact nodes. Stable on ties by id.
  */

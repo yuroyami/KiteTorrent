@@ -17,7 +17,7 @@ import kotlinx.io.readByteArray
 import kotlin.coroutines.CoroutineContext
 
 /**
- * The socket runtime — one [SelectorManager] drives all non-blocking I/O, the way a
+ * The socket runtime. One [SelectorManager] drives all non-blocking I/O, the way a
  * single Boost.Asio `io_context` does in libtorrent. ktor-network's selector is
  * coroutine-native, so there are no callbacks: a read simply suspends.
  */
@@ -75,8 +75,8 @@ suspend fun NetworkRuntime.connectTcp(
     connectTimeoutMs: Long = 0L,
     /**
      * Dial [host]:[port] *directly*, ignoring [NetworkRuntime.proxy]. Used to reach the proxy
-     * itself — e.g. opening a SOCKS5 UDP-ASSOCIATE control connection — which must not be tunnelled
-     * through the very proxy it is establishing (that would dead-loop the negotiation).
+     * itself (for example when opening a SOCKS5 UDP-ASSOCIATE control connection). That dial must
+     * not be tunnelled through the proxy it is establishing, or the negotiation recurses forever.
      */
     bypassProxy: Boolean = false,
 ): TcpConnection {
@@ -112,7 +112,7 @@ suspend fun NetworkRuntime.connectTcp(
 }
 
 /**
- * A listening TCP socket — accepts inbound peer connections (libtorrent's
+ * A listening TCP socket. It accepts inbound peer connections (libtorrent's
  * `listen_socket_t`). Used by the engine to receive connections and by tests to
  * stand up a loopback seeder.
  */
@@ -131,8 +131,8 @@ suspend fun NetworkRuntime.bindTcp(port: Int, host: String = "0.0.0.0"): TcpServ
     TcpServer(aSocket(selector).tcp().bind(InetSocketAddress(host, port)))
 
 /**
- * A datagram (host, port) source/sink — the seam consumers (DHT, UDP trackers, uTP)
- * program against. [UdpSocket] is the real implementation; a demultiplexer (see
+ * A datagram (host, port) source and sink. This is the seam consumers (DHT, UDP
+ * trackers, uTP) program against. [UdpSocket] is the real implementation; a demultiplexer (see
  * `UtpSocketManager`) hands out *virtual* transports over one shared socket, the way
  * libtorrent's `session_impl` routes one listen socket to uTP, DHT and trackers.
  */
@@ -150,11 +150,11 @@ interface DatagramTransport {
 }
 
 /**
- * A real UDP socket — for UDP trackers, the DHT, and uTP.
+ * A real UDP socket, for UDP trackers, the DHT, and uTP.
  *
  * When [socks5] is set, this socket is *proxied*: outbound datagrams are SOCKS5-wrapped (RFC 1928
  * §7) and physically sent to the proxy's UDP relay, and inbound datagrams are unwrapped so the
- * caller sees the true origin `(host, port)` — the destination IP never leaves the host in clear.
+ * caller sees the true origin `(host, port)`. The destination IP never leaves the host in clear.
  * This is the seam that routes the engine's shared uTP/DHT/UDP-tracker socket through the proxy
  * without touching [UtpSocketManager]/[UtpStream] (they keep sending/receiving on a [UdpSocket]).
  * Mirrors libtorrent's `udp_socket`, which wraps/unwraps via its embedded `socks5` helper on the
@@ -177,7 +177,7 @@ class UdpSocket(
 
     /**
      * Return a *proxied* view of this socket that SOCKS5-wraps every send through [association]'s
-     * relay and unwraps every receive — reusing this socket's underlying ktor socket, so there is
+     * relay and unwraps every receive. It reuses this socket's underlying ktor socket, so there is
      * exactly one physical socket (the association's relay) carrying the wrapped traffic. The
      * non-proxy [UdpSocket] is left untouched. Used by the engine to hand uTP/DHT a proxied socket.
      */
@@ -211,7 +211,7 @@ class UdpSocket(
         return receiveRaw()
     }
 
-    /** Raw (un-proxied) send straight to [host]:[port] — also used to reach the proxy relay. */
+    /** Raw (un-proxied) send straight to [host]:[port]. It also reaches the proxy relay. */
     private suspend fun sendRaw(data: ByteArray, host: String, port: Int) {
         socket.send(Datagram(Buffer().apply { write(data) }, InetSocketAddress(host, port)))
     }
@@ -225,7 +225,7 @@ class UdpSocket(
 
     /**
      * Close the socket. For a proxied socket this also tears down the SOCKS5 association (its kept-
-     * alive control connection — the proxy drops the relay when it closes anyway), so an ephemeral
+     * alive control connection, since the proxy drops the relay when it closes anyway), so an ephemeral
      * proxied socket leaks nothing. The association's `close()` re-closes this same underlying
      * socket, which is harmless. A direct socket just closes the socket.
      */

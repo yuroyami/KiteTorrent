@@ -85,7 +85,7 @@ val infoHash = Hasher.hash(infoBytes)        // SHA-1 → the v1 info-hash
 ```
 
 !!! note
-    Re-encoding the `info` dictionary and hashing that would silently change the hash whenever a producer used non-canonical key order. `dataSection()` sidesteps the whole problem by hashing what was actually there. In practice you rarely call it by hand: [`TorrentInfo`](#torrent-metadata) does the info-hashing for you.
+    Re-encoding the `info` dictionary and hashing that would silently change the hash whenever a producer used non-canonical key order. `dataSection()` avoids the problem by hashing what was actually there. In practice you rarely call it by hand: [`TorrentInfo`](#torrent-metadata) does the info-hashing for you.
 
 ## Hashing and crypto
 
@@ -106,7 +106,7 @@ val distance = a xor a              // XOR metric (used by the DHT)
 println(distance.isAllZeros())      // true
 ```
 
-`Digest32` carries the operations the rest of the library leans on:
+`Digest32` carries the operations the rest of the library uses:
 
 - Bytes: `size`, `get(i)`, `toByteArray()`, `toHex()`, `isAllZeros()`
 - Bitwise: `xor`, `and`, `or`, `inv()`
@@ -247,7 +247,7 @@ The same `FileStorage` is what the session's `FileDiskIo` uses to lay files out 
 
 ### Creating a torrent
 
-`CreateTorrent` builds a `.torrent` from a file layout, producing bytes that are byte-identical to what libtorrent's `create_torrent` would emit for the same input. See [Seeding](seeding.md) for the end-to-end flow.
+`CreateTorrent` builds a `.torrent` from a file layout. For the same input it produces bytes that are identical to libtorrent's `create_torrent` output. See [Seeding](seeding.md) for the end-to-end flow.
 
 ## Magnet links
 
@@ -302,9 +302,9 @@ val custom = MagnetUri.makeMagnetUri(
 
 ## Piece picking and algorithms
 
-The piece picker decides which block to ask which peer for, and it is the part of BitTorrent that most affects swarm health. KiteTorrent ports libtorrent's `piece_picker` whole, with the full option set, as a pure component you can drive yourself.
+The piece picker decides which block to ask which peer for. It is the part of BitTorrent that most affects swarm health. `PiecePicker` is a pure component with the full option set, and you can drive it yourself.
 
-`PiecePicker` supports rarest-first, reverse (most-common-first, for snubbed peers), sequential, prioritize-partials, and the end-game busy tail, with the same bit values as upstream. A request is a `PieceBlock`:
+`PiecePicker` supports rarest-first, reverse (most-common-first, for snubbed peers), sequential, prioritize-partials, and the end-game busy tail. A request is a `PieceBlock`:
 
 ```kotlin
 import io.github.yuroyami.kitetorrent.picker.PieceBlock
@@ -339,7 +339,7 @@ Because these are pure encode/decode types, the session module ([`PeerConnection
 
 The core also holds the bookkeeping side of peers, independent of live sockets:
 
-- `TorrentPeer`: one peer's record (`host`, `port`, `address`), with the trust counters libtorrent uses to decide who to dial and who to drop (`connectable`, `failcount` which saturates at 31, `trust_points`, `source`).
+- `TorrentPeer`: one peer's record (`host`, `port`, `address`), with the trust counters that decide who to dial and who to drop (`connectable`, `failcount` which saturates at 31, `trust_points`, `source`).
 - `PeerList`: a sorted repository of peers for a torrent.
 - `PeerAddress`: an IPv4 or IPv6 address representation.
 - `IpFilter`: range-based access control.
@@ -354,7 +354,7 @@ val verdict = filter.access("10.1.2.3")                  // nonzero = blocked
 
 ### Identifying clients
 
-`Fingerprint` parses a peer ID into a client name and version, so you can tell a µTorrent from a Transmission from a libtorrent. `Hex` and `util.Base32` handle the encodings BitTorrent uses (hex info-hashes, base32 magnet hashes), and `util.UrlEscape` handles tracker query encoding.
+`Fingerprint` parses a peer ID into a client name and version, so you can tell which client a peer runs. `Hex` and `util.Base32` handle the encodings BitTorrent uses (hex info-hashes, base32 magnet hashes), and `util.UrlEscape` handles tracker query encoding.
 
 ## DHT primitives
 
@@ -389,7 +389,7 @@ import io.github.yuroyami.kitetorrent.dht.RoutingTable
 | **[Seeding](seeding.md)** | Create a torrent and serve it. |
 | **[Engine settings](engine-settings.md)** | `SettingsPack`, rate limits, the connection cap. |
 | **[Platform support](platforms.md)** | What runs where, and why. |
-| **[About / status](about.md)** | What is ported, what is not, and what is next. |
+| **[About and status](about.md)** | What works today, and the known defects. |
 
 ## Install
 

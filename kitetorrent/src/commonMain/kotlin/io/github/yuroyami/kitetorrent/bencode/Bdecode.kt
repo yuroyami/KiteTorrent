@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.bencode
 
 /**
- * Bencode *decoder* — port of libtorrent's `bdecode()` (src/bdecode.cpp). Parses a
+ * Bencode *decoder*, the port of libtorrent's `bdecode()` (src/bdecode.cpp). Parses a
  * bencoded buffer into a [BdecodeNode] tree whose nodes reference back into the
  * original [ByteArray] (no copies of the payload are made until you ask for them).
  *

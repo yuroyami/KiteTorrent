@@ -1,7 +1,7 @@
 package io.github.yuroyami.kitetorrent.picker
 
 /**
- * Per-piece / per-file download priority constants — pure-Kotlin port of
+ * Per-piece and per-file download priority constants. This is a pure-Kotlin port of
  * libtorrent's `download_priority.hpp`.
  *
  * libtorrent models priority as a `std::uint8_t` strong typedef in the range
